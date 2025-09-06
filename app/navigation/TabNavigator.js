@@ -1,7 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from '../screens/HomeScreen';
 import TrailsScreen from '../screens/TrailsScreen';
-import COScreen from '../screens/COScreen';
+import GOScreen from '../screens/GOScreen';
 import AIScreen from '../screens/AIScreen';
 import { Text, StyleSheet } from 'react-native';
 
@@ -12,17 +12,19 @@ export default function TabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#0f172a',
-        tabBarInactiveTintColor: '#6b7280',
+        tabBarActiveTintColor: '#fff',
+        tabBarInactiveTintColor: '#888',
         tabBarStyle: {
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 8,
+          backgroundColor: '#1E1E1E',
+          borderTopWidth: 0,
+          height: 80,
+          paddingBottom: 10,
+          paddingTop: 10,
         },
         tabBarLabelStyle: {
-          fontSize: 13,
+          fontSize: 14,
           fontWeight: '600'
-        }
+        },
       }}
     >
       <Tab.Screen
@@ -36,9 +38,9 @@ export default function TabNavigator() {
         options={{ tabBarLabel: ({ color }) => <Text style={[styles.tabLabel, { color }]}>Trails</Text> }}
       />
       <Tab.Screen
-        name="CO"
-        component={COScreen}
-        options={{ tabBarLabel: ({ color }) => <Text style={[styles.tabLabel, { color }]}>CO</Text> }}
+        name="GO"
+        component={GOScreen}
+        options={{ tabBarLabel: ({ color }) => <Text style={[styles.tabLabel, { color }]}>GO</Text> }}
       />
       <Tab.Screen
         name="AI"
