@@ -1,11 +1,11 @@
-import { memo, useMemo, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
-import MapView, { Polyline, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import React, { memo, useMemo, useCallback } from 'react';
+import { StyleSheet } from 'react-native';
+import MapView, { Polyline, Marker, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps';
 import { CONFIG } from '../config/env';
 
-const MapView3D = memo(({ 
-  routes = [], 
-  centerCoordinate, 
+const OpenStreetMapView = memo(({
+  routes = [],
+  centerCoordinate,
   zoomLevel = CONFIG.MAP_ZOOM_LEVEL,
   onPress,
   style = { flex: 1 },
@@ -16,14 +16,11 @@ const MapView3D = memo(({
     return routes.map((route, idx) => {
       const id = route.id || `route-${idx}`;
       const feature = route.geojson?.features?.[0];
-      
       if (!feature || feature.geometry.type !== 'LineString') return null;
-      
       const coordinates = feature.geometry.coordinates.map(coord => ({
         latitude: coord[1],
         longitude: coord[0]
       }));
-      
       return (
         <Polyline
           key={id}
@@ -38,9 +35,7 @@ const MapView3D = memo(({
   }, [routes]);
 
   const handlePress = useCallback((event) => {
-    if (onPress) {
-      onPress(event);
-    }
+    if (onPress) onPress(event);
   }, [onPress]);
 
   const region = useMemo(() => {
@@ -61,10 +56,10 @@ const MapView3D = memo(({
   }, [centerCoordinate]);
 
   return (
-    <MapView 
+    <MapView
       style={[styles.mapView, style]}
       onPress={handlePress}
-      provider={PROVIDER_GOOGLE}
+      provider={PROVIDER_DEFAULT}
       region={region}
       showsUserLocation={showUserLocation}
       showsMyLocationButton={false}
@@ -74,7 +69,15 @@ const MapView3D = memo(({
       showsIndoors={false}
       showsPointsOfInterest={false}
       showsTraffic={false}
+      customMapStyle={[]}
     >
+      <UrlTile
+        urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        maximumZ={19}
+        flipY={false}
+        tileSize={256}
+        zIndex={-1}
+      />
       {routeElements}
       {userLocation && (
         <Marker
@@ -95,6 +98,6 @@ const styles = StyleSheet.create({
   }
 });
 
-MapView3D.displayName = 'MapView3D';
+OpenStreetMapView.displayName = 'OpenStreetMapView';
 
-export default MapView3D;
+export default OpenStreetMapView;

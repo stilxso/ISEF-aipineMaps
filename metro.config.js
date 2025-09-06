@@ -1,9 +1,3 @@
-const { getDefaultConfig } = require('metro-config'); 
-const { withNativeWind } = require('nativewind/metro');
+const { getDefaultConfig } = require('metro-config');
 
-const defaultConfig = (async () => await getDefaultConfig())();
-
-module.exports = withNativeWind({
-  resolver: defaultConfig.resolver,
-  transformer: defaultConfig.transformer,
-}, { input: './global.css' });
+module.exports = getDefaultConfig(__dirname);

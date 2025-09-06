@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [76.9580, 43.0600, 1700],
+          [76.9610, 43.0650, 1850],
+          [76.9650, 43.0700, 2360]
+        ]
+      },
+      "properties": {
+        "name": "Большой Алматинский пик",
+        "difficulty": "B",
+        "elevation_gain": 660
+      }
+    }
+  ]
+}
