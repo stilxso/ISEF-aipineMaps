@@ -35,7 +35,7 @@ const OpenStreetMapView = memo(({
   }, [routes]);
 
   const handlePress = useCallback((event) => {
-    if (onPress) onPress(event);
+    if (onPress && typeof onPress === 'function') onPress(event);
   }, [onPress]);
 
   const region = useMemo(() => {

@@ -38,7 +38,7 @@ const MapView3D = memo(({
   }, [routes]);
 
   const handlePress = useCallback((event) => {
-    if (onPress) {
+    if (onPress && typeof onPress === 'function') {
       onPress(event);
     }
   }, [onPress]);

@@ -128,10 +128,10 @@ export default function TabNavigator() {
         }}
       />
       <Tab.Screen
-        name="Настройки"
+        name="Больше"
         component={SettingsScreen}
         options={{
-          tabBarLabel: createTabLabel("Настройки"),
+          tabBarLabel: createTabLabel("Больше"),
         }}
       />
     </Tab.Navigator>

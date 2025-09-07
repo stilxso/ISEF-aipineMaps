@@ -91,7 +91,7 @@ export default function ThreeDMapScreen() {
 
     function initMap() {
       try {
-        // Используем темный стиль карты
+        // Используем темный стиль карты с рельефом
         const style = {
           version: 8,
           sources: {
@@ -100,6 +100,11 @@ export default function ThreeDMapScreen() {
               tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
               tileSize: 256,
               attribution: '© OpenStreetMap contributors'
+            },
+            'terrain': {
+              type: 'raster-dem',
+              url: 'https://demotiles.maplibre.org/terrain/{z}/{x}/{y}.png',
+              tileSize: 256
             }
           },
           layers: [{
@@ -108,7 +113,11 @@ export default function ThreeDMapScreen() {
             source: 'osm',
             minzoom: 0,
             maxzoom: 19
-          }]
+          }],
+          terrain: {
+            source: 'terrain',
+            exaggeration: 1.5
+          }
         };
 
         map = new maplibregl.Map({
@@ -121,6 +130,11 @@ export default function ThreeDMapScreen() {
           antialias: true,
           maxZoom: 18,
           minZoom: 3
+        });
+
+        // Включаем 3D рельеф
+        map.on('load', () => {
+          map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
         });
 
         // Добавляем контролы

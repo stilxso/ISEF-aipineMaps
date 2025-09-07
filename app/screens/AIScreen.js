@@ -44,19 +44,26 @@ export default function AIScreen() {
   const { weatherData } = useWeather();
   const { settings } = useSettings();
 
+  // State declarations first
   const [history, setHistory] = useState([]);
   const [peaks, setPeaks] = useState([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [messages, setMessages] = useState([
+    { id: 'sys1', role: 'assistant', text: 'Привет! Я горный ассистент. Задайте вопрос про маршрут, погоду, риски, снаряжение и время в пути.' }
+  ]);
+  const [checklist, setChecklist] = useState([]);
+  const [showChecklist, setShowChecklist] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const h = await loadData(CONFIG.STORAGE_KEYS.HISTORY);
-      setHistory(h || []);
-      const p = await getPeaks();
-      setPeaks(p || []);
-      const c = await loadData('checklist');
-      setChecklist(c || []);
-    })();
-  }, []);
+  // Refs
+  const listRef = useRef(null);
+  const sendScale = useRef(new Animated.Value(1)).current;
+  const checklistOpacity = useRef(new Animated.Value(0)).current;
+
+  // последний маршрут
+  const latest = useMemo(() => {
+    return routes && routes.length ? routes[routes.length - 1] : null;
+  }, [routes]);
 
   // сохранить чеклист
   const saveChecklist = useCallback(async (newChecklist) => {
@@ -110,22 +117,16 @@ export default function AIScreen() {
     setShowChecklist(!showChecklist);
   }, [showChecklist, checklistOpacity]);
 
-  // последний маршрут
-  const latest = useMemo(() => {
-    return routes && routes.length ? routes[routes.length - 1] : null;
-  }, [routes]);
-
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const [messages, setMessages] = useState([
-    { id: 'sys1', role: 'assistant', text: 'Привет! Я горный ассистент. Задайте вопрос про маршрут, погоду, риски, снаряжение и время в пути.' }
-  ]);
-  const [checklist, setChecklist] = useState([]);
-  const [showChecklist, setShowChecklist] = useState(false);
-
-  const listRef = useRef(null);
-  const sendScale = useRef(new Animated.Value(1)).current;
-  const checklistOpacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    (async () => {
+      const h = await loadData(CONFIG.STORAGE_KEYS.HISTORY);
+      setHistory(h || []);
+      const p = await getPeaks();
+      setPeaks(p || []);
+      const c = await loadData('checklist');
+      setChecklist(c || []);
+    })();
+  }, []);
   // скролл вниз
   const scrollToEnd = () => {
     requestAnimationFrame(() => {
@@ -314,6 +315,10 @@ export default function AIScreen() {
           placeholder="Спросите про маршрут, риски, снаряжение..."
           placeholderTextColor="#8da1c9"
           editable={!sending}
+          autoFocus={true}
+          multiline={false}
+          returnKeyType="send"
+          onSubmitEditing={onSend}
         />
         <Animated.View style={{ transform: [{ scale: sendScale }] }}>
           <TouchableOpacity style={[styles.sendBtn, sending && styles.sendBtnDisabled]} onPress={onSend} disabled={sending}>

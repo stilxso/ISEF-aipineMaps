@@ -204,10 +204,10 @@ const OSMWebView = memo(({
       attributionControl: false
     }).setView(center, ${JSON.stringify(zoom)});
 
-    // Темный тайл слой
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
-      maxZoom: 20,
-      attribution: '© Stadia Maps, © OpenMapTiles © OpenStreetMap contributors'
+    // Темный тайл слой (OpenStreetMap - бесплатный)
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
     // Добавляем масштаб

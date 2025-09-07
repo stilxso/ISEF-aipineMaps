@@ -1,32 +1,57 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, Animated, ScrollView } from 'react-native';
 import OSMWebView from '../components/OSMWebView';
 import { useRecorder } from '../contexts/RecorderContext';
 import { useRoutes } from '../contexts/RoutesContext';
 import { useLocation } from '../contexts/LocationContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 export default function HomeScreen() {
   const { recording, current, records, start, stop, save, discard } = useRecorder();
   const { addRoute } = useRoutes();
-  const { currentLocation, heading, speed, accuracy } = useLocation();
+  const { currentLocation, heading, speed, accuracy, watching, startWatching } = useLocation();
+  const { settings, updateSetting } = useSettings();
   const [saving, setSaving] = useState(false);
   const [showStats] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
   const startScale = useRef(new Animated.Value(1)).current;
   const stopScale = useRef(new Animated.Value(1)).current;
   const saveScale = useRef(new Animated.Value(1)).current;
   const discardScale = useRef(new Animated.Value(1)).current;
   const compassRotation = useRef(new Animated.Value(0)).current;
+  const settingsOpacity = useRef(new Animated.Value(0)).current;
 
   // обновляем компас при изменении heading
   useEffect(() => {
-    if (heading !== 0) {
-      Animated.timing(compassRotation, {
-        toValue: heading,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    }
+    Animated.timing(compassRotation, {
+      toValue: heading || 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
   }, [heading, compassRotation]);
+
+  // запускаем слежку за локацией для компаса
+  useEffect(() => {
+    let cleanupFunction = null;
+
+    const startCompass = async () => {
+      try {
+        if (!watching) {
+          cleanupFunction = await startWatching();
+        }
+      } catch (error) {
+        console.warn('Не удалось запустить компас:', error);
+      }
+    };
+
+    startCompass();
+
+    return () => {
+      if (cleanupFunction) {
+        cleanupFunction();
+      }
+    };
+  }, [startWatching, watching]);
 
   // живой маршрут строим
   const liveRoute = useMemo(() => {
@@ -82,6 +107,28 @@ export default function HomeScreen() {
     }
   };
 
+  // переключить настройки
+  const toggleSettings = () => {
+    const toValue = showSettings ? 0 : 1;
+    Animated.timing(settingsOpacity, {
+      toValue,
+      duration: 300,
+      useNativeDriver: true
+    }).start();
+    setShowSettings(!showSettings);
+  };
+
+  // настройки элементы
+  const settingsItems = useMemo(() => ([
+    { key: 'language', label: 'Язык / Language', value: settings.language === 'ru' ? 'Русский' : 'English', next: settings.language === 'ru' ? 'en' : 'ru' },
+    { key: 'theme', label: 'Тема / Theme', value: settings.theme, next: settings.theme === 'dark' ? 'light' : 'dark' },
+    { key: 'units', label: 'Единицы / Units', value: settings.units, next: settings.units === 'metric' ? 'imperial' : 'metric' },
+    { key: 'mapProvider', label: 'Карта / Map Provider', value: settings.mapProvider, next: settings.mapProvider === 'default' ? 'osm' : 'default' },
+    { key: 'locationEnabled', label: 'Локация / Location', value: String(settings.locationEnabled), next: String(!settings.locationEnabled) },
+    { key: 'notificationsEnabled', label: 'Уведомления / Notifications', value: String(settings.notificationsEnabled), next: String(!settings.notificationsEnabled) },
+    { key: 'autoSave', label: 'Автосохранение / Auto Save', value: String(settings.autoSave), next: String(!settings.autoSave) },
+  ]), [settings]);
+
   const renderItem = ({ item }) => {
     const name = item.name || item.id;
     const len = item?.stats?.length_km ? `${item.stats.length_km} km` : '';
@@ -95,7 +142,49 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>AlpineMaps</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>AlpineMaps</Text>
+        <TouchableOpacity onPress={toggleSettings} style={styles.settingsBtn}>
+          <Text style={styles.settingsBtnText}>{showSettings ? 'Скрыть' : 'Больше'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {showSettings && (
+        <Animated.View style={[styles.settingsPanel, { opacity: settingsOpacity }]}>
+          <ScrollView contentContainerStyle={styles.settingsList}>
+            {settingsItems.map(item => (
+              <View key={item.key} style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <Text style={styles.settingLabel}>{item.label}</Text>
+                  <Text style={styles.settingValue}>{item.value}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.settingBtn}
+                  onPress={() => {
+                    const v = item.next;
+                    if (item.key === 'locationEnabled' || item.key === 'notificationsEnabled' || item.key === 'autoSave') {
+                      updateSetting(item.key, v === 'true');
+                    } else {
+                      updateSetting(item.key, v);
+                    }
+                  }}
+                >
+                  <Text style={styles.settingBtnText}>Изменить</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            <View style={styles.aboutSection}>
+              <Text style={styles.aboutTitle}>О нас</Text>
+              <Text style={styles.aboutText}>
+                AlpineMaps - ваше приложение для горных походов.{'\n'}
+                Функции: навигация, запись маршрутов, ИИ-помощник,{'\n'}
+                3D-карты и многое другое.
+              </Text>
+            </View>
+          </ScrollView>
+        </Animated.View>
+      )}
+
       <View style={styles.mapWrap}>
         <OSMWebView routes={allRoutes} centerCoordinate={center} zoom={14} />
 
@@ -216,9 +305,23 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0b0d2a', padding: 16, gap: 16 },
-  title: { fontSize: 24, fontWeight: '800', color: '#ffffff', textAlign: 'center', marginBottom: 8 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  title: { fontSize: 24, fontWeight: '800', color: '#ffffff' },
+  settingsBtn: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#5b6eff', borderRadius: 8 },
+  settingsBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  settingsPanel: { backgroundColor: '#1a2145', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  settingsList: { gap: 12 },
+  settingRow: { backgroundColor: '#2a2a2a', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  settingLeft: { gap: 6 },
+  settingLabel: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  settingValue: { color: '#bbb', fontSize: 14 },
+  settingBtn: { backgroundColor: '#2563eb', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
+  settingBtnText: { color: '#fff', fontWeight: '700' },
+  aboutSection: { backgroundColor: '#2a2a2a', padding: 16, borderRadius: 12, marginTop: 8 },
+  aboutTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  aboutText: { color: '#93a4c8', fontSize: 14, lineHeight: 20 },
   mapWrap: { flex: 1, borderRadius: 16, overflow: 'hidden', position: 'relative', shadowColor: '#5b6eff', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
-  controls: { position: 'absolute', bottom: 16, left: 16, right: 16, flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
+  controls: { position: 'absolute', bottom: 16, left: 16, right: 16, flexDirection: 'row', gap: 12, justifyContent: 'center' },
   btn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 3 },
   btnPrimary: { backgroundColor: '#5b6eff' },
   btnWarn: { backgroundColor: '#ef4444' },
