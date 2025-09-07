@@ -28,7 +28,7 @@ export const SettingsProvider = ({ children }) => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Load settings on mount
+  // загружаем настройки при монтировании
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -47,7 +47,7 @@ export const SettingsProvider = ({ children }) => {
     loadSettings();
   }, []);
 
-  // Save settings whenever they change
+  // сохраняем настройки при изменении
   useEffect(() => {
     if (!loading) {
       saveData(CONFIG.STORAGE_KEYS.SETTINGS, settings);
@@ -91,21 +91,21 @@ export const SettingsProvider = ({ children }) => {
   }, [settings.theme]);
 
   const value = {
-    // State
+    // состояние
     settings,
     loading,
 
-    // Actions
+    // действия
     updateSetting,
     updateSettings,
     resetSettings,
 
-    // Computed
+    // вычисляемые
     isDarkMode: settings.theme === 'dark',
     isMetric: settings.units === 'metric',
     themeColors: getThemeColors(),
 
-    // Getters
+    // геттеры
     getSetting: (key) => settings[key],
   };
 

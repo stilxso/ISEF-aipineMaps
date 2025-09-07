@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import * as Location from 'expo-location';
+import { createContext, useContext, useState, useCallback } from 'react';
+import Geolocation from '@react-native-community/geolocation';
 import { CONFIG } from '../config/env';
 
 const LocationContext = createContext();
@@ -21,31 +21,51 @@ export const LocationProvider = ({ children }) => {
   const [watching, setWatching] = useState(false);
   const [error, setError] = useState(null);
 
-  // Request location permissions
+  // права на локацию запрашиваем
   const requestPermissions = useCallback(async () => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermission(status);
-      return status === 'granted';
+      return new Promise((resolve) => {
+        Geolocation.getCurrentPosition(
+          () => {
+            setLocationPermission('granted');
+            resolve(true);
+          },
+          (err) => {
+            console.warn('права на локацию нет:', err);
+            setLocationPermission('denied');
+            setError(err.message);
+            resolve(false);
+          },
+          { enableHighAccuracy: false, timeout: 5000 }
+        );
+      });
     } catch (err) {
-      console.warn('Error requesting location permissions:', err);
+      console.warn('ошибка с правами:', err);
       setError(err.message);
       return false;
     }
   }, []);
 
-  // Get current location once
+  // текущая локация получаем
   const getCurrentLocation = useCallback(async () => {
     try {
       setError(null);
       const hasPermission = locationPermission === 'granted' || await requestPermissions();
 
       if (!hasPermission) {
-        throw new Error('Location permission denied');
+        throw new Error('права на локацию нет');
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+      const location = await new Promise((resolve, reject) => {
+        Geolocation.getCurrentPosition(
+          (position) => resolve(position),
+          (err) => reject(err),
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 10000
+          }
+        );
       });
 
       const newLocation = {
@@ -63,65 +83,71 @@ export const LocationProvider = ({ children }) => {
 
       return newLocation;
     } catch (err) {
-      console.warn('Error getting current location:', err);
+      console.warn('ошибка с локацией:', err);
       setError(err.message);
       throw err;
     }
   }, [locationPermission, requestPermissions]);
 
-  // Start watching location
+  // слежка за локацией
   const startWatching = useCallback(async () => {
     try {
       setError(null);
       const hasPermission = locationPermission === 'granted' || await requestPermissions();
 
       if (!hasPermission) {
-        throw new Error('Location permission denied');
+        throw new Error('права на локацию нет');
       }
 
       setWatching(true);
 
-      const subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: CONFIG.LOCATION_UPDATE_INTERVAL,
-          distanceInterval: 1,
-        },
-        (location) => {
+      const watchId = Geolocation.watchPosition(
+        (position) => {
           const newLocation = {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            altitude: location.coords.altitude,
-            accuracy: location.coords.accuracy,
-            timestamp: location.timestamp,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            altitude: position.coords.altitude,
+            accuracy: position.coords.accuracy,
+            timestamp: position.timestamp,
           };
 
           setCurrentLocation(newLocation);
-          setHeading(location.coords.heading || 0);
-          setSpeed(location.coords.speed || 0);
-          setAccuracy(location.coords.accuracy || 0);
+          setHeading(position.coords.heading || 0);
+          setSpeed(position.coords.speed || 0);
+          setAccuracy(position.coords.accuracy || 0);
+        },
+        (err) => {
+          console.warn('ошибка слежки:', err);
+          setError(err.message);
+          setWatching(false);
+        },
+        {
+          enableHighAccuracy: true,
+          distanceFilter: 1,
+          interval: CONFIG.LOCATION_UPDATE_INTERVAL,
+          fastestInterval: 1000
         }
       );
 
-      return () => subscription.remove();
+      return () => Geolocation.clearWatch(watchId);
     } catch (err) {
-      console.warn('Error starting location watch:', err);
+      console.warn('не смог запустить слежку:', err);
       setError(err.message);
       setWatching(false);
       throw err;
     }
   }, [locationPermission, requestPermissions]);
 
-  // Stop watching location
+  // стоп слежка
   const stopWatching = useCallback(() => {
     setWatching(false);
   }, []);
 
-  // Calculate distance between two points
+  // расстояние между точками
   const calculateDistance = useCallback((point1, point2) => {
     if (!point1 || !point2) return 0;
 
-    const R = 6371e3; // Earth's radius in meters
+    const R = 6371e3; // радиус земли в метрах
     const φ1 = (point1.latitude * Math.PI) / 180;
     const φ2 = (point2.latitude * Math.PI) / 180;
     const Δφ = ((point2.latitude - point1.latitude) * Math.PI) / 180;
@@ -135,18 +161,22 @@ export const LocationProvider = ({ children }) => {
     return R * c;
   }, []);
 
-  // Get address from coordinates
+  // адрес по координатам (просто заглушка)
   const reverseGeocode = useCallback(async (latitude, longitude) => {
     try {
-      const address = await Location.reverseGeocodeAsync({ latitude, longitude });
-      return address[0];
+      return {
+        city: 'Неизвестно',
+        region: 'Неизвестно',
+        country: 'Неизвестно',
+        street: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+      };
     } catch (err) {
-      console.warn('Error reverse geocoding:', err);
+      console.warn('ошибка геокода:', err);
       return null;
     }
   }, []);
 
-  // Format coordinates for display
+  // координаты форматируем
   const formatCoordinates = useCallback((latitude, longitude, precision = 6) => {
     return {
       latitude: parseFloat(latitude.toFixed(precision)),
@@ -156,7 +186,6 @@ export const LocationProvider = ({ children }) => {
   }, []);
 
   const value = {
-    // State
     currentLocation,
     locationPermission,
     heading,
@@ -164,22 +193,16 @@ export const LocationProvider = ({ children }) => {
     accuracy,
     watching,
     error,
-
-    // Actions
     requestPermissions,
     getCurrentLocation,
     startWatching,
     stopWatching,
-
-    // Utilities
     calculateDistance,
     reverseGeocode,
     formatCoordinates,
-
-    // Computed
     hasPermission: locationPermission === 'granted',
     isLocationAvailable: currentLocation !== null,
-    speedKmh: speed * 3.6, // Convert m/s to km/h
+    speedKmh: speed * 3.6, // м/с в км/ч
   };
 
   return (

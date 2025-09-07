@@ -18,7 +18,6 @@ export const RoutesProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [currentRoute, setCurrentRoute] = useState(null);
 
-  // Load data on mount
   useEffect(() => {
     const loadAllData = async () => {
       try {

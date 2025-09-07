@@ -84,7 +84,6 @@ export async function parseGpxFileAndSave(localPath, options = {}) {
 
       const cumulative = [];
       let cumDist = 0;
-      let last = null;
       for (let i = 0; i < coords.length; i++) {
         const [lon, lat, eleRaw] = coords[i];
         const ele = (eleRaw !== undefined && !isNaN(eleRaw)) ? Number(eleRaw) : undefined;
@@ -118,7 +117,6 @@ export async function parseGpxFileAndSave(localPath, options = {}) {
           cumDistKm: Number(cumDist.toFixed(4)),
           cumTimeMin
         });
-        last = { lat, lon, elev: ele };
       }
 
       const predictedHours = (lengthKm / cfg.avgSpeedKmh) + (gain / cfg.ascentMetersPerHour);
