@@ -1,19 +1,24 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, Animated, ScrollView } from 'react-native';
-import OSMWebView from '../components/OSMWebView';
+import MapBoxMapView from '../components/MapBoxMapView'; // Заменяем OSMWebView на MapBox
 import { useRecorder } from '../contexts/RecorderContext';
 import { useRoutes } from '../contexts/RoutesContext';
 import { useLocation } from '../contexts/LocationContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { getPlaces } from '../services/places'; // Добавляем сервис мест
 
 export default function HomeScreen() {
+  // Получаем данные из контекстов для работы с картой и маршрутами
   const { recording, current, records, start, stop, save, discard } = useRecorder();
   const { addRoute } = useRoutes();
   const { currentLocation, heading, speed, accuracy, watching, startWatching } = useLocation();
   const { settings, updateSetting } = useSettings();
-  const [saving, setSaving] = useState(false);
-  const [showStats] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
+
+  // Локальное состояние компонента
+  const [saving, setSaving] = useState(false); // Флаг сохранения маршрута
+  const [showStats] = useState(true); // Показывать ли статистику (компас, высота, скорость)
+  const [showSettings, setShowSettings] = useState(false); // Показывать ли панель настроек
+  const [places, setPlaces] = useState([]); // Список интересных мест (родники, пики, перевалы)
   const startScale = useRef(new Animated.Value(1)).current;
   const stopScale = useRef(new Animated.Value(1)).current;
   const saveScale = useRef(new Animated.Value(1)).current;
@@ -52,6 +57,22 @@ export default function HomeScreen() {
       }
     };
   }, [startWatching, watching]);
+
+  // Загружаем список мест при монтировании компонента
+  useEffect(() => {
+    const loadPlacesData = async () => {
+      try {
+        const placesData = await getPlaces();
+        setPlaces(placesData);
+      } catch (error) {
+        console.warn('Ошибка загрузки мест:', error);
+        // В случае ошибки оставляем пустой массив
+        setPlaces([]);
+      }
+    };
+
+    loadPlacesData();
+  }, []);
 
   // живой маршрут строим
   const liveRoute = useMemo(() => {
@@ -186,7 +207,28 @@ export default function HomeScreen() {
       )}
 
       <View style={styles.mapWrap}>
-        <OSMWebView routes={allRoutes} centerCoordinate={center} zoom={14} />
+        {/* Основная карта MapBox с маршрутами и местами */}
+        <MapBoxMapView
+          routes={allRoutes} // Передаем маршруты для отображения
+          markers={places} // Передаем места (родники, пики, перевалы)
+          centerCoordinate={center} // Центр карты
+          zoomLevel={14} // Уровень масштабирования
+          showUserLocation={true} // Показывать локацию пользователя
+          userLocation={currentLocation} // Текущая локация пользователя
+          enable3D={settings.mapProvider === 'satellite'} // Включаем 3D режим для спутникового вида
+          terrainEnabled={settings.mapProvider === 'satellite'} // Включаем рельеф для 3D
+          onMarkerPress={(markerId) => {
+            // Обработчик нажатия на маркер места
+            const place = places.find(p => p.id === markerId);
+            if (place) {
+              Alert.alert(
+                place.name,
+                `${place.description}\nВысота: ${place.altitude}м\nСложность: ${place.difficulty}`,
+                [{ text: 'OK' }]
+              );
+            }
+          }}
+        />
 
         {/* Экспериментальные фичи: Компас и статистика */}
         {showStats && (

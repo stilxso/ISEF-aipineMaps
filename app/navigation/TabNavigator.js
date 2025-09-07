@@ -7,6 +7,7 @@ import GOScreen from '../screens/GOScreen';
 import AIScreen from '../screens/AIScreen';
 import ThreeDMapScreen from '../screens/ThreeDMapScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import AuthScreen from '../screens/AuthScreen';
 
 const Tab = createBottomTabNavigator();
 const { width } = Dimensions.get('window');
@@ -132,6 +133,13 @@ export default function TabNavigator() {
         component={SettingsScreen}
         options={{
           tabBarLabel: createTabLabel("Больше"),
+        }}
+      />
+      <Tab.Screen
+        name="Профиль"
+        component={AuthScreen}
+        options={{
+          tabBarLabel: createTabLabel("Профиль"),
         }}
       />
     </Tab.Navigator>
