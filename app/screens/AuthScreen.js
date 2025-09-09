@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -12,39 +12,14 @@ import {
 } from 'react-native';
 import { saveData } from '../services/storage';
 
-export default function AuthScreen({ navigation }) {
-  // Состояния для формы
-  const [isLogin, setIsLogin] = useState(true); // true - вход, false - регистрация
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function AuthScreen({ onAuthentication }) {
+   // Состояния для формы
+   const [email, setEmail] = useState('');
+   const [password, setPassword] = useState('');
+   const [confirmPassword, setConfirmPassword] = useState('');
+   const [name, setName] = useState('');
+   const [loading, setLoading] = useState(false);
 
-  // Обработчик входа
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Ошибка', 'Заполните все поля');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Имитация API вызова
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Сохраняем данные пользователя
-      await saveData('user', { email, name: name || email.split('@')[0] });
-
-      Alert.alert('Успех', 'Добро пожаловать!', [
-        { text: 'OK', onPress: () => navigation.replace('Карта') }
-      ]);
-    } catch (error) {
-      Alert.alert('Ошибка', 'Не удалось войти. Проверьте данные.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Обработчик регистрации
   const handleRegister = async () => {
@@ -72,7 +47,7 @@ export default function AuthScreen({ navigation }) {
       await saveData('user', { email, name, registeredAt: new Date().toISOString() });
 
       Alert.alert('Успех', 'Регистрация завершена!', [
-        { text: 'OK', onPress: () => navigation.replace('Карта') }
+        { text: 'OK', onPress: () => onAuthentication() }
       ]);
     } catch (error) {
       Alert.alert('Ошибка', 'Не удалось зарегистрироваться. Попробуйте позже.');
@@ -91,26 +66,24 @@ export default function AuthScreen({ navigation }) {
         <View style={styles.header}>
           <Text style={styles.title}>AlpineMaps</Text>
           <Text style={styles.subtitle}>
-            {isLogin ? 'Вход в аккаунт' : 'Создание аккаунта'}
+            Создание аккаунта
           </Text>
         </View>
 
         {/* Форма */}
         <View style={styles.form}>
-          {/* Поле имени (только для регистрации) */}
-          {!isLogin && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Имя</Text>
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="Ваше имя"
-                placeholderTextColor="#8da1c9"
-                autoCapitalize="words"
-              />
-            </View>
-          )}
+          {/* Поле имени */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Имя</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Ваше имя"
+              placeholderTextColor="#8da1c9"
+              autoCapitalize="words"
+            />
+          </View>
 
           {/* Email */}
           <View style={styles.inputGroup}>
@@ -141,45 +114,31 @@ export default function AuthScreen({ navigation }) {
             />
           </View>
 
-          {/* Подтверждение пароля (только для регистрации) */}
-          {!isLogin && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Подтвердите пароль</Text>
-              <TextInput
-                style={styles.input}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Повторите пароль"
-                placeholderTextColor="#8da1c9"
-                secureTextEntry
-                autoCapitalize="none"
-              />
-            </View>
-          )}
+          {/* Подтверждение пароля */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Подтвердите пароль</Text>
+            <TextInput
+              style={styles.input}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Повторите пароль"
+              placeholderTextColor="#8da1c9"
+              secureTextEntry
+              autoCapitalize="none"
+            />
+          </View>
 
           {/* Кнопка действия */}
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={isLogin ? handleLogin : handleRegister}
+            onPress={handleRegister}
             disabled={loading}
           >
             <Text style={styles.buttonText}>
-              {loading ? 'Загрузка...' : (isLogin ? 'Войти' : 'Зарегистрироваться')}
+              {loading ? 'Загрузка...' : 'Зарегистрироваться'}
             </Text>
           </TouchableOpacity>
 
-          {/* Переключатель между входом и регистрацией */}
-          <TouchableOpacity
-            style={styles.switchButton}
-            onPress={() => setIsLogin(!isLogin)}
-          >
-            <Text style={styles.switchText}>
-              {isLogin
-                ? 'Нет аккаунта? Зарегистрироваться'
-                : 'Уже есть аккаунт? Войти'
-              }
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* Дополнительная информация */}

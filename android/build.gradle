@@ -24,14 +24,26 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url "https://www.jitpack.io" }
+        
+
         maven {
-            url 'https://api.mapbox.com/downloads/v2/releases/maven/'
+            url 'https://api.mapbox.com/downloads/v2/releases/maven'
             authentication {
                 basic(BasicAuthentication)
             }
             credentials {
-                username = 'mapbox'
-                password = MAPBOX_ACCESS_TOKEN
+                username = "mapbox"
+                password = project.hasProperty('MAPBOX_DOWNLOADS_TOKEN')
+                    ? project.property('MAPBOX_DOWNLOADS_TOKEN')
+                    : System.getenv('MAPBOX_DOWNLOADS_TOKEN')
+            }
+        }
+
+        maven { url "https://maven.google.com" }
+        jcenter() {
+            content {
+                includeModule("com.facebook.yoga", "proguard-annotations")
             }
         }
     }

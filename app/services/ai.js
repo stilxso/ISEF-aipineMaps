@@ -1,95 +1,102 @@
 import * as turf from '@turf/turf';
 
-// статистика маршрута из геоджейсона
+const DEFAULT_AVG_SPEED_KMH = 5;
+// функция для расчета статистики маршрута, проверяй GeoJSON
+const DEFAULT_ASCENT_METERS_PER_HOUR = 300;
+
 export function routeStatsFromGeojson(geojson) {
   try {
-    const feature =
+         const feature =
       geojson?.features?.find((f) => f?.geometry?.type === 'LineString') ||
       geojson?.features?.[0];
 
     if (!feature?.geometry?.coordinates?.length) return null;
+// здесь рассчитываем длину и подъем
 
-    const lengthKm = turf.length(feature, { units: 'kilometers' });
+         const lengthKm = turf.length(feature, { units: 'kilometers' });
 
-    let gain = 0;
-    let prevElevation = null;
-    for (const coord of feature.geometry.coordinates) {
+         let elevationGain = 0;
+    let previousElevation = null;
+    for (const coordinate of feature.geometry.coordinates) {
       const elevation =
-        coord && coord.length >= 3 && !isNaN(coord[2]) ? Number(coord[2]) : null;
-      if (elevation !== null && prevElevation !== null) {
-        const diff = elevation - prevElevation;
-        if (diff > 0) gain += diff;
+        coordinate && coordinate.length >= 3 && !isNaN(coordinate[2])
+          ? Number(coordinate[2])
+          : null;
+
+      if (elevation !== null && previousElevation !== null) {
+        const elevationDiff = elevation - previousElevation;
+        if (elevationDiff > 0) elevationGain += elevationDiff;
       }
-      if (elevation !== null) prevElevation = elevation;
+
+      if (elevation !== null) previousElevation = elevation;
     }
 
     return {
       length_km: Number(lengthKm.toFixed(2)),
-      elevation_gain_m: Math.round(gain),
+      elevation_gain_m: Math.round(elevationGain),
     };
-  } catch {
+  } catch (error) {
+    console.warn('Error calculating route stats:', error.message);
     return null;
   }
 }
 
-// генерим советы для похода
 export function generateAdvice(route, ctx = {}) {
-  const stats =
-    route?.stats?.length_km
-      ? route.stats
-      : routeStatsFromGeojson(route?.geojson) || {};
+     const stats = route?.stats?.length_km
+    ? route.stats
+    : routeStatsFromGeojson(route?.geojson) || {};
 
   const lengthKm = stats.length_km || 0;
-  const gainM = stats.elevation_gain_m || 0;
+  const elevationGainM = stats.elevation_gain_m || 0;
 
-  const weather = ctx.weather || {};
-  const wind = weather.windSpeed || 0;
-  const temp = weather.temperature || 10;
+// генерирует советы для похода, учитывай погоду
+     const weather = ctx.weather || {};
+  const windSpeed = weather.windSpeed || 0;
+  const temperature = weather.temperature || 10;
 
-  const riskScore =
+     const riskScore =
     (lengthKm > 15 ? 1 : 0) +
-    (gainM > 1200 ? 1 : 0) +
-    (wind > 8 ? 1 : 0) +
-    (temp < -5 ? 1 : 0);
+    (elevationGainM > 1200 ? 1 : 0) +
+    (windSpeed > 8 ? 1 : 0) +
+    (temperature < -5 ? 1 : 0);
 
-  const distanceTag =
-    lengthKm <= 8 ? 'Легкая дистанция' : lengthKm <= 15 ? 'Средняя дистанция' : 'Длинная дистанция';
-  const ascentTag =
-    gainM < 400 ? 'Низкий подъем' : gainM <= 1000 ? 'Средний подъем' : 'Высокий подъем';
+     const distanceTag = lengthKm <= 8 ? 'Easy distance' : lengthKm <= 15 ? 'Medium distance' : 'Long distance';
+  const ascentTag = elevationGainM < 400 ? 'Low elevation' : elevationGainM <= 1000 ? 'Medium elevation' : 'High elevation';
 
-  const conditions = [];
-  if (temp < 0) conditions.push('Холодно будет');
-  if (wind > 10) conditions.push('Сильный ветер');
+     const conditions = [];
+  if (temperature < 0) conditions.push('Cold weather');
+  if (windSpeed > 10) conditions.push('Strong wind');
 
-  const waterLiters = Math.max(1, Math.round(lengthKm / 8));
+     const waterLiters = Math.max(1, Math.round(lengthKm / 8));
   const foodUnits = Math.max(1, Math.round(lengthKm / 4));
 
-  const pace = gainM > 1200 || lengthKm > 18 ? 'осторожно' : 'нормально';
+     const pace = elevationGainM > 1200 || lengthKm > 18 ? 'cautiously' : 'normally';
 
-  const flatHours = lengthKm / (ctx.avgSpeedKmh || 5);
-  const ascentHours = gainM / (ctx.ascentMetersPerHour || 300);
-  const totalHours = (flatHours + ascentHours).toFixed(1);
+     const flatTimeHours = lengthKm / (ctx.avgSpeedKmh || DEFAULT_AVG_SPEED_KMH);
+  const ascentTimeHours = elevationGainM / (ctx.ascentMetersPerHour || DEFAULT_ASCENT_METERS_PER_HOUR);
+  const totalHours = (flatTimeHours + ascentTimeHours).toFixed(1);
 
-  const summary = `Дистанция ${lengthKm} км, подъем ${gainM} м, темп ${pace}.`;
-  const tags = [distanceTag, ascentTag].concat(conditions);
-  const timing = [`Время: ${totalHours} ч`];
-  if (riskScore >= 2) timing.push('Выходи рано, думай про возврат');
+     const summary = `Distance ${lengthKm} km, elevation ${elevationGainM} m, pace ${pace}.`;
+  const tags = [distanceTag, ascentTag, ...conditions];
+  const timing = [`Time: ${totalHours} h`];
+  if (riskScore >= 2) timing.push('Start early, plan for return');
 
   const checklist = [
-    'Навигация: телефон + повербанк, оффлайн карта',
-    `Вода: ${waterLiters}л всего`,
-    `Еда: ${foodUnits} порций`,
-    'Одежда: база, утепление, штормовка',
+    'Navigation: phone + power bank, offline map',
+    `Water: ${waterLiters}L total`,
+    `Food: ${foodUnits} portions`,
+    'Clothing: base layer, insulation, rain jacket',
   ];
-  if (temp <= 0) checklist.push('Теплые перчатки и шапка');
-  if (wind > 10) checklist.push('Ветровка обязательна');
+  if (temperature <= 0) checklist.push('Warm gloves and hat');
+  if (windSpeed > 10) checklist.push('Wind jacket required');
 
-  const body = [
+     const adviceText = [
     summary,
     tags.join(', '),
     timing.join('. '),
-    checklist.map((i) => `- ${i}`).join('\n'),
+    checklist.map(item => `- ${item}`).join('\n'),
   ].join('\n');
 
-  return body;
+  return adviceText;
 }
+// возвращаем готовый текст с советами

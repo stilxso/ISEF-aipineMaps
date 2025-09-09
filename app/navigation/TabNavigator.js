@@ -1,231 +1,281 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
+import { useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Dimensions,
+  Platform,
+  Animated,
+  Easing,
+} from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from '../screens/HomeScreen';
-import TrailsScreen from '../screens/TrailsScreen';
-import GOScreen from '../screens/GOScreen';
+import MapScreen from '../screens/MapScreen';
+import GoScreen from '../screens/GoScreen';
 import AIScreen from '../screens/AIScreen';
-import ThreeDMapScreen from '../screens/ThreeDMapScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import AuthScreen from '../screens/AuthScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
 const { width } = Dimensions.get('window');
+const isLargeScreen = width > 400;
+const tabGap = isLargeScreen ? 24 : 16;
+const tabFontSize = isLargeScreen ? 18 : 16;
 
-const NAV_BG = '#0b0d2a';
-const NAV_INACTIVE = '#93a4c8';
-const NAV_ACTIVE = '#ffffff';
-const NAV_ACTIVE_BG = '#1a2145'; // Светлый фон для активной вкладки
-const GO_BG = '#5b6eff';
-const GO_SIZE = 80; // Огромная кнопка СТАРТ
+const TAB_BG = '#28263C';
+const ACTIVE_UNDERLINE = '#ffffff';
+const INACTIVE = '#bfc7d6';
+const GO_BG = '#0f0d15';
+const GO_ACCENT = '#ffffff';
+const TAB_HEIGHT = 80;
+const SAFE_BOTTOM = Platform.OS === 'ios' ? 24 : 12;
+
+const GO_WIDTH = 70;
+const GO_HEIGHT = 50;
+const GO_BORDER_RADIUS = 14;
+
+function CustomTabBar({ state, navigation }) {
+  const routes = state.routes;
+// this custom tab bar function, careful with the animations bro
+
+    const underlineAnimsRef = useRef([]);
+
+  useEffect(() => {
+    const current = underlineAnimsRef.current;
+    if (current.length !== routes.length) {
+      const newArr = routes.map((_, i) => {
+        if (current[i]) return current[i];
+        return new Animated.Value(state.index === i ? 1 : 0);
+      });
+      underlineAnimsRef.current = newArr;
+    }
+        underlineAnimsRef.current.forEach((anim, i) => {
+      anim.setValue(state.index === i ? 1 : 0);
+    });
+      }, [routes.length]);
+
+  useEffect(() => {
+    const animations = underlineAnimsRef.current.map((anim, i) =>
+      Animated.timing(anim, {
+        toValue: state.index === i ? 1 : 0,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      })
+    );
+    Animated.parallel(animations).start();
+  }, [state.index]);
+
+  const isFocused = (index) => state.index === index;
+
+  const onTabPress = (routeName, index) => {
+    const event = navigation.emit({
+      type: 'tabPress',
+      target: routes[index].key,
+      canPreventDefault: true,
+    });
+    if (!event.defaultPrevented) navigation.navigate(routeName);
+  };
 
 
-const TabLabel = React.memo(({ label, focused }) => (
-  <View style={[
-    styles.tabLabelContainer,
-    focused && styles.activeTabLabel
-  ]}>
-    <Text
-      style={[
-        styles.tabLabel,
-        { color: focused ? NAV_ACTIVE : NAV_INACTIVE }
-      ]}
-    >
-      {label}
-    </Text>
-    {focused && <View style={styles.activeIndicator} />}
-  </View>
-));
+    const renderTab = (routeName, label, index) => {
+    const focused = isFocused(index);
+    const anim = underlineAnimsRef.current[index] || new Animated.Value(0);
 
-const GoTabButton = React.memo(({ onPress }) => (
-  <View style={styles.goButtonContainer}>
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.goButton,
-        { transform: [{ scale: pressed ? 0.95 : 1 }] }
-      ]}
-    >
-      <View style={styles.goButtonInner}>
-        <Text style={styles.goButtonText}>СТАРТ</Text>
-        <View style={styles.goButtonGlow} />
+    const maxWidth = 36;
+    const underlineWidth = anim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, maxWidth],
+    });
+    const underlineOpacity = anim.interpolate({
+      inputRange: [0, 0.6, 1],
+      outputRange: [0, 0.45, 1],
+    });
+
+    return (
+      <Pressable
+        key={routeName}
+        onPress={() => onTabPress(routeName, index)}
+        style={styles.tabButton}
+        accessibilityRole="button"
+      >
+        <View style={styles.labelWrap}>
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: focused ? '#fff' : INACTIVE, fontFamily: 'Montserrat' },
+            ]}
+          >
+            {label}
+          </Text>
+
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.underline,
+              {
+                width: underlineWidth,
+                opacity: underlineOpacity,
+              },
+            ]}
+          />
+        </View>
+      </Pressable>
+    );
+  };
+
+  const idxMap = {};
+  routes.forEach((r, i) => (idxMap[r.name] = i));
+  const homeIndex = idxMap['Home'] ?? 0;
+  const mapIndex = idxMap['Map'] ?? 1;
+  const aiIndex = idxMap['AI'] ?? 3;
+  const profileIndex = idxMap['Profile'] ?? 4;
+
+    const goBottom = SAFE_BOTTOM + Math.max(0, (TAB_HEIGHT - GO_HEIGHT) / 2) - 10;
+
+  return (
+    <View pointerEvents="box-none" style={styles.container}>
+      <View style={styles.tabBar}>
+        <View style={styles.side}>
+          {renderTab('Home', 'Home', homeIndex)}
+          {renderTab('Map', 'Trails', mapIndex)}
+        </View>
+
+        <View style={styles.sideRight}>
+          {renderTab('AI', 'AI', aiIndex)}
+          {renderTab('Profile', 'Profile', profileIndex)}
+        </View>
       </View>
-    </Pressable>
-  </View>
-));
 
-// Helper functions to avoid inline component definitions
-const createTabLabel = (label) => ({ focused }) => <TabLabel label={label} focused={focused} />;
-const createGoButton = (onPress) => <GoTabButton onPress={onPress} />;
+      <View
+        style={[
+          styles.goWrapper,
+          { left: (width - GO_WIDTH) / 2, bottom: goBottom, width: GO_WIDTH, height: GO_HEIGHT },
+        ]}
+        pointerEvents="box-none"
+      >
+        <Pressable
+          onPress={() => navigation.navigate('GoScreen')}
+          style={({ pressed }) => [
+            styles.goBackground,
+            { transform: [{ scale: pressed ? 0.97 : 1 }] },
+          ]}
+          accessibilityRole="button"
+        >
+          <View style={styles.goInnerShadow} pointerEvents="none" />
+          <Text style={[styles.goText, { fontFamily: 'Montserrat' }]}>GO</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
+// yo, this is the main tab navigator export, dont change the screens order man
 export default function TabNavigator() {
   return (
     <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: NAV_ACTIVE,
-        tabBarInactiveTintColor: NAV_INACTIVE,
-        tabBarStyle: {
-          backgroundColor: NAV_BG,
-          borderTopWidth: 0,
-          height: 90,
-          paddingBottom: 10,
-          paddingTop: 10,
-          paddingHorizontal: 10,
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-        },
-        tabBarItemStyle: {
-          paddingVertical: 4,
-          marginHorizontal: 2,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '700'
-        },
-      }}
+      initialRouteName="Home"
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => <CustomTabBar {...props} />}
     >
-      <Tab.Screen
-        name="Карта"
-        component={HomeScreen}
-        options={{
-          tabBarLabel: createTabLabel("Карта"),
-        }}
-      />
-      <Tab.Screen
-        name="Маршруты"
-        component={TrailsScreen}
-        options={{
-          tabBarLabel: createTabLabel("Маршруты"),
-        }}
-      />
-      <Tab.Screen
-        name="СТАРТ"
-        component={GOScreen}
-        options={{
-          tabBarLabel: '',
-          tabBarButton: createGoButton,
-        }}
-      />
-      <Tab.Screen
-        name="ИИ"
-        component={AIScreen}
-        options={{
-          tabBarLabel: createTabLabel("ИИ"),
-        }}
-      />
-      <Tab.Screen
-        name="3D"
-        component={ThreeDMapScreen}
-        options={{
-          tabBarLabel: createTabLabel("3D"),
-        }}
-      />
-      <Tab.Screen
-        name="Больше"
-        component={SettingsScreen}
-        options={{
-          tabBarLabel: createTabLabel("Больше"),
-        }}
-      />
-      <Tab.Screen
-        name="Профиль"
-        component={AuthScreen}
-        options={{
-          tabBarLabel: createTabLabel("Профиль"),
-        }}
-      />
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Map" component={MapScreen} />
+      <Tab.Screen name="GoScreen" component={GoScreen} options={{ tabBarButton: () => null }} />
+      <Tab.Screen name="AI" component={AIScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
 
 const styles = StyleSheet.create({
-  tabLabelContainer: {
+  container: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+  },
+  tabBar: {
+    height: TAB_HEIGHT,
+    backgroundColor: TAB_BG,
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 28,
+    alignItems: 'flex-end',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 12,
+  },
+  side: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  sideRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  tabButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    minWidth: 60,
+    paddingHorizontal: tabGap / 2,
+    minWidth: 64,
+    height: TAB_HEIGHT,
   },
-  activeTabLabel: {
-    backgroundColor: NAV_ACTIVE_BG,
-    shadowColor: NAV_ACTIVE,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+  labelWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    paddingBottom: 6,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: tabFontSize,
     fontWeight: '700',
-    textAlign: 'center',
   },
-  activeIndicator: {
+  underline: {
     position: 'absolute',
     bottom: -2,
-    left: '50%',
-    marginLeft: -10,
-    width: 20,
     height: 3,
-    backgroundColor: NAV_ACTIVE,
+    backgroundColor: ACTIVE_UNDERLINE,
     borderRadius: 2,
   },
-  goButtonContainer: {
+  goWrapper: {
     position: 'absolute',
-    top: -GO_SIZE / 2,
-    left: width / 2 - GO_SIZE / 2,
-    width: GO_SIZE,
-    height: GO_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 40,
   },
-  goButton: {
-    width: GO_SIZE,
-    height: GO_SIZE,
-    borderRadius: GO_SIZE / 2,
+  goBackground: {
+    width: GO_WIDTH,
+    height: GO_HEIGHT,
+    borderRadius: GO_BORDER_RADIUS,
     backgroundColor: GO_BG,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: GO_BG,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-    borderWidth: 3,
-    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    elevation: 16,
+    overflow: 'hidden',
   },
-  goButtonInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  goButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  goButtonGlow: {
+  goInnerShadow: {
     position: 'absolute',
-    top: -5,
-    left: -5,
-    right: -5,
-    bottom: -5,
-    borderRadius: (GO_SIZE + 10) / 2,
-    backgroundColor: 'rgba(91, 110, 255, 0.3)',
-    shadowColor: GO_BG,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
+    left: -8,
+    right: -8,
+    top: -8,
+    bottom: -8,
+    borderRadius: GO_BORDER_RADIUS,
+    backgroundColor: 'rgba(91,110,255,0.03)',
+  },
+  goText: {
+    color: GO_ACCENT,
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
 });
