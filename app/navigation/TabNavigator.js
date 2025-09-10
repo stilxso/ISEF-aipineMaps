@@ -36,7 +36,7 @@ const GO_BORDER_RADIUS = 14;
 
 function CustomTabBar({ state, navigation }) {
   const routes = state.routes;
-// this custom tab bar function, careful with the animations bro
+  // тут создаем кастомный таб бар с анимациями
 
     const underlineAnimsRef = useRef([]);
 
@@ -170,7 +170,7 @@ function CustomTabBar({ state, navigation }) {
   );
 }
 
-// yo, this is the main tab navigator export, dont change the screens order man
+// тут экспортируем главный таб навигатор, порядок экранов важен
 export default function TabNavigator() {
   return (
     <Tab.Navigator

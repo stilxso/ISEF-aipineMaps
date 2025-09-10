@@ -50,7 +50,7 @@ export async function downloadMapTile(zoom, x, y, style = 'satellite') {
 }
 
 /**
- * Calculate tile indexes covering bounds
+ * тут вычисляем индексы тайлов для покрытия границ
  */
 function latLngToTile(lat, lng, zoom) {
   const n = Math.pow(2, zoom);
@@ -85,7 +85,7 @@ function getTilesInBounds(bounds, zoom) {
 }
 
 /**
- * Save region metadata and tile paths
+ * тут сохраняем метаданные региона и пути к тайлам
  */
 async function saveRegionInfo(centerLat, centerLng, zoom, radiusKm, style, tilePaths) {
   try {
@@ -122,7 +122,7 @@ async function saveRegionInfo(centerLat, centerLng, zoom, radiusKm, style, tileP
 }
 
 /**
- * Public: download region: returns progress details
+ * публичная функция: скачиваем регион, возвращаем детали прогресса
  */
 export async function downloadMapRegion(centerLat, centerLng, zoom, radiusKm = 5, style = 'satellite', onProgress = () => {}) {
   try {

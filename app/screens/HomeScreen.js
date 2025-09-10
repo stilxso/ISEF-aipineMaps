@@ -1,21 +1,17 @@
+// тут импортируем хуки и компоненты для домашнего экрана
 import { useMemo } from 'react';
-import { View, StyleSheet, FlatList, Text, TouchableOpacity, Alert } from 'react-native';
-import MapBoxMapView from '../components/MapBoxMapView';
+// здесь импортируем компоненты реакт натива
+import { View, StyleSheet, FlatList, Text, TouchableOpacity, Alert, Image } from 'react-native';
+// подключаем контекст маршрутов
 import { useRoutes } from '../contexts/RoutesContext';
+// импортируем функции для оффлайн карт
 import { deleteRegion, getDownloadedRegions } from '../services/offlineMaps';
 
+// главный экран с маршрутами
 export default function HomeScreen() {
   const { records, replaceRoutes } = useRoutes();
 
-  const center = useMemo(() => {
-    if (records?.length) {
-      const f = records[records.length - 1]?.geojson?.features?.[0];
-      const c = f?.geometry?.coordinates?.[0];
-      if (c) return [c[0], c[1]];
-    }
-    return [76.8512, 43.2389];
-  }, [records]);
-
+  // функция для удаления маршрута
   const onDeleteRoute = (id) => {
     Alert.alert('Удалить маршрут', 'Вы уверены?', [
       { text: 'Отмена', style: 'cancel' },
@@ -23,6 +19,7 @@ export default function HomeScreen() {
     ]);
   };
 
+  // тут показываем скачанные регионы
   const showDownloadedRegions = async () => {
     const regs = await getDownloadedRegions();
     Alert.alert('Оффлайн регионы', `Найдено: ${regs.length}`, [{ text: 'OK' }]);
@@ -30,7 +27,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <MapBoxMapView routes={records} markers={[]} centerCoordinate={center} enable3D zoomLevel={12} />
       <View style={styles.panel}>
         <Text style={styles.title}>Записанные маршруты</Text>
         <FlatList
@@ -41,9 +37,21 @@ export default function HomeScreen() {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>{item.name || item.id}</Text>
               {!!item?.stats?.length_km && <Text style={styles.cardSub}>{item.stats.length_km} км</Text>}
+              {item.photos && item.photos.length > 0 && (
+                <FlatList
+                  data={item.photos}
+                  horizontal
+                  keyExtractor={(photo, index) => `${item.id}-photo-${index}`}
+                  renderItem={({ item: photo }) => (
+                    <Image source={{ uri: photo }} style={styles.photo} />
+                  )}
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.photosList}
+                />
+              )}
               <View style={styles.row}>
-                <TouchableOpacity onPress={() => Alert.alert('Просмотр', 'Открыть маршрут на карте')} style={styles.btn}>
-                  <Text style={styles.btnText}>Открыть</Text>
+                <TouchableOpacity onPress={() => Alert.alert('GPX', `Файл: ${item.localFile || 'Не найден'}`)} style={styles.btn}>
+                  <Text style={styles.btnText}>GPX</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => onDeleteRoute(item.id)} style={[styles.btn, { backgroundColor: '#ef4444' }]}>
                   <Text style={styles.btnText}>Удалить</Text>
@@ -65,10 +73,8 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0b0d2a' },
   panel: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
+    flex: 1,
+    margin: 16,
     backgroundColor: 'rgba(11,13,42,0.92)',
     borderRadius: 14,
     padding: 12,
@@ -80,6 +86,8 @@ const styles = StyleSheet.create({
   card: { paddingVertical: 8 },
   cardTitle: { color: '#fff', fontWeight: '700' },
   cardSub: { color: '#93a4c8' },
+  photosList: { marginTop: 8 },
+  photo: { width: 80, height: 80, borderRadius: 8, marginRight: 8 },
   row: { flexDirection: 'row', gap: 8, marginTop: 8 },
   btn: { backgroundColor: '#5b6eff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8 },
   btnText: { color: '#fff', fontWeight: '700' },

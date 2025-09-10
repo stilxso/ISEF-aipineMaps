@@ -1,3 +1,4 @@
+// сервис для работы с GPX файлами
 import RNFS from 'react-native-fs';
 import axios from 'axios';
 import { DOMParser } from 'xmldom';
@@ -6,18 +7,11 @@ import * as turf from '@turf/turf';
 import { saveData, loadData } from './storage';
 import { CONFIG } from '../config/env';
 
-// Constants
 const GPX_DIRECTORY = 'gpx';
 const DOWNLOAD_TIMEOUT = 30000;
-const PROGRESS_DIVIDER = 5;
 
 /**
- * Download GPX file to local storage
- * @param {string} url - URL of the GPX file
- * @param {string} filename - Name for the local file
- * @param {Function} onProgress - Progress callback function
- * @returns {Promise<string>} Local file path
- * @throws {Error} If download fails
+ * Скачивает GPX в локальный файл (RNFS -> fallback axios)
  */
 export async function downloadGpxToLocal(url, filename, onProgress) {
   const directory = `${RNFS.DocumentDirectoryPath}/${GPX_DIRECTORY}`;
@@ -25,11 +19,10 @@ export async function downloadGpxToLocal(url, filename, onProgress) {
   const localPath = `${directory}/${filename}`;
 
   try {
-    // Try RNFS download first
     const download = RNFS.downloadFile({
       fromUrl: url,
       toFile: localPath,
-      progressDivider: PROGRESS_DIVIDER,
+      progressDivider: 5,
       progress: (res) => {
         if (onProgress && res.contentLength > 0) {
           const percent = Math.round((res.bytesWritten / res.contentLength) * 100);
@@ -37,177 +30,239 @@ export async function downloadGpxToLocal(url, filename, onProgress) {
         }
       }
     });
-
     const result = await download.promise;
     if (result.statusCode >= 200 && result.statusCode < 300) {
       return localPath;
     } else {
       throw new Error(`HTTP status ${result.statusCode}`);
     }
-  } catch (error) {
-    // Fallback to axios
+  } catch (err) {
+    // fallback
     try {
-      const response = await axios.get(url, {
-        responseType: 'text',
-        timeout: DOWNLOAD_TIMEOUT
-      });
+      const response = await axios.get(url, { responseType: 'text', timeout: DOWNLOAD_TIMEOUT });
       await RNFS.writeFile(localPath, response.data, 'utf8');
       if (onProgress) onProgress(100);
       return localPath;
-    } catch (fallbackError) {
-      throw new Error(`Failed to download GPX: ${fallbackError.message || fallbackError}`);
+    } catch (e) {
+      throw new Error(`Failed to download GPX: ${e.message || e}`);
     }
   }
 }
 
 /**
- * Parse GPX file and save route data
- * @param {string} localPath - Path to local GPX file
- * @param {Object} options - Parsing options
- * @returns {Promise<Object>} Route entry with stats and geojson
- * @throws {Error} If parsing fails
+ * Парсит GPX файл, генерирует GeoJSON, считает статистику,
+ * добавляет маркеры (start, waypoints) и сохраняет маршрут в хранилище.
  */
 export async function parseGpxFileAndSave(localPath, options = {}) {
   const defaults = {
-    avgSpeedKmh: CONFIG.DEFAULT_AVG_SPEED_KMH,
-    ascentMetersPerHour: CONFIG.DEFAULT_ASCENT_METERS_PER_HOUR
+    avgSpeedKmh: CONFIG.DEFAULT_AVG_SPEED_KMH || 3,
+    ascentMetersPerHour: CONFIG.DEFAULT_ASCENT_METERS_PER_HOUR || 600,
   };
   const config = { ...defaults, ...options };
 
   let gpxContent;
   try {
     gpxContent = await RNFS.readFile(localPath, 'utf8');
+
+    if (!gpxContent || gpxContent.trim().length === 0) {
+      throw new Error('GPX file empty');
+    }
+
+    if (gpxContent.length > 20 * 1024 * 1024) {
+      throw new Error('GPX file too large (>20MB)');
+    }
+
+    // ensure XML header
+    if (!gpxContent.startsWith('<?xml')) {
+      gpxContent = '<?xml version="1.0" encoding="UTF-8"?>\n' + gpxContent;
+    }
+    gpxContent = gpxContent.replace(/^\uFEFF/, '');
+
   } catch (error) {
-    throw new Error(`Failed to read local GPX file: ${error.message || error}`);
+    throw new Error(`Failed read GPX: ${error.message || error}`);
   }
 
   let geojson;
   try {
     const xmlDoc = new DOMParser().parseFromString(gpxContent, 'text/xml');
+    const parserError = xmlDoc.getElementsByTagName('parsererror');
+    if (parserError && parserError.length) {
+      const txt = parserError[0].textContent || 'XML parse error';
+      throw new Error(txt);
+    }
     geojson = toGeoJSON.gpx(xmlDoc);
+    if (!geojson || geojson.type !== 'FeatureCollection') {
+      throw new Error('Converted GeoJSON is invalid');
+    }
   } catch (error) {
-    throw new Error(`Error parsing GPX to GeoJSON: ${error.message || error}`);
+    throw new Error(`GPX -> GeoJSON failed: ${error.message || error}`);
   }
 
+  // compute stats and markers
+  const features = Array.isArray(geojson.features) ? geojson.features : [];
+  // find primary LineString (trk)
+  const lineFeature = features.find(f => f.geometry && f.geometry.type === 'LineString');
+  const markers = [];
+
+  if (lineFeature && Array.isArray(lineFeature.geometry.coordinates) && lineFeature.geometry.coordinates.length) {
+    const coords = lineFeature.geometry.coordinates;
+    // start marker
+    const start = coords[0];
+    if (start && start.length >= 2) {
+      markers.push({
+        id: `start_${Date.now()}`,
+        type: 'route-start',
+        latitude: Number(start[1]),
+        longitude: Number(start[0]),
+        title: 'Start',
+      });
+    }
+    // end marker
+    const end = coords[coords.length - 1];
+    if (end && end.length >= 2) {
+      markers.push({
+        id: `end_${Date.now()}`,
+        type: 'route-end',
+        latitude: Number(end[1]),
+        longitude: Number(end[0]),
+        title: 'End',
+      });
+    }
+  }
+
+  // waypoints (wpt tags -> Point features)
+  features.forEach((f, idx) => {
+    if (f.geometry && f.geometry.type === 'Point') {
+      const c = f.geometry.coordinates;
+      if (Array.isArray(c) && c.length >= 2) {
+        markers.push({
+          id: `wpt_${idx}_${Date.now()}`,
+          type: 'waypoint',
+          latitude: Number(c[1]),
+          longitude: Number(c[0]),
+          title: (f.properties && (f.properties.name || f.properties.desc)) || `WPT ${idx + 1}`,
+        });
+      }
+    }
+  });
+
+  // compute distance, elevation gain etc for main line
   let stats = {};
-  if (geojson && Array.isArray(geojson.features) && geojson.features.length > 0) {
-    // Find the main LineString feature
-    const mainFeature = geojson.features.find(feature =>
-      feature.geometry && feature.geometry.type === 'LineString'
-    ) || geojson.features[0];
-
-    if (mainFeature && mainFeature.geometry && mainFeature.geometry.coordinates) {
-      const coordinates = mainFeature.geometry.coordinates;
-      const lengthKm = turf.length(mainFeature, { units: 'kilometers' });
-
-      // Calculate total elevation gain
+  if (lineFeature) {
+    try {
+      const lengthKm = turf.length(lineFeature, { units: 'kilometers' });
       let elevationGain = 0;
-      let previousElevation = null;
-      for (let i = 0; i < coordinates.length; i++) {
-        const coord = coordinates[i];
-        const elevation = (coord && coord.length >= 3 && !isNaN(coord[2])) ? Number(coord[2]) : null;
-        if (elevation !== null && previousElevation !== null) {
-          const elevationDiff = elevation - previousElevation;
-          if (elevationDiff > 0) elevationGain += elevationDiff;
+      let prevElev = null;
+      const coords = lineFeature.geometry.coordinates;
+      for (let i = 0; i < coords.length; i++) {
+        const elev = (coords[i] && coords[i].length >= 3 && !isNaN(coords[i][2])) ? Number(coords[i][2]) : null;
+        if (elev !== null && prevElev !== null) {
+          const diff = elev - prevElev;
+          if (diff > 0) elevationGain += diff;
         }
-        if (elevation !== null) previousElevation = elevation;
+        if (elev !== null) prevElev = elev;
       }
 
-      // Calculate cumulative data
-      const cumulative = [];
+      // cumulative (sampled)
       let cumulativeDistance = 0;
-      for (let i = 0; i < coordinates.length; i++) {
-        const [lon, lat, elevationRaw] = coordinates[i];
-        const elevation = (elevationRaw !== undefined && !isNaN(elevationRaw)) ? Number(elevationRaw) : undefined;
-
+      const cumulative = [];
+      for (let i = 0; i < coords.length; i++) {
+        const [lon, lat, elevRaw] = coords[i];
+        const elev = (elevRaw !== undefined && !isNaN(elevRaw)) ? Number(elevRaw) : undefined;
         if (i > 0) {
-          const previousCoord = coordinates[i - 1];
-          const from = turf.point([previousCoord[0], previousCoord[1]]);
-          const to = turf.point([lon, lat]);
-          const segmentKm = turf.distance(from, to, { units: 'kilometers' });
-          cumulativeDistance += segmentKm;
+          const prev = coords[i - 1];
+          const seg = turf.distance(turf.point([prev[0], prev[1]]), turf.point([lon, lat]), { units: 'kilometers' });
+          cumulativeDistance += seg;
         }
-
         const horizontalHours = cumulativeDistance / config.avgSpeedKmh;
-
-        // Calculate local elevation gain up to this point
-        let localElevationGain = 0;
-        let previousElevationLocal = null;
-        for (let j = 0; j <= i; j++) {
-          const elevationValue = coordinates[j][2];
-          const elevationNumber = (elevationValue !== undefined && !isNaN(elevationValue)) ? Number(elevationValue) : null;
-          if (previousElevationLocal !== null && elevationNumber !== null) {
-            const elevationDiff = elevationNumber - previousElevationLocal;
-            if (elevationDiff > 0) localElevationGain += elevationDiff;
-          }
-          if (elevationNumber !== null) previousElevationLocal = elevationNumber;
-        }
-
-        const ascentHours = localElevationGain / config.ascentMetersPerHour;
-        const cumulativeTimeMin = Math.round((horizontalHours + ascentHours) * 60);
-
+        // approximate ascent to this point
         cumulative.push({
-          lat,
-          lon,
-          elev: elevation,
+          lat: Number(lat),
+          lon: Number(lon),
+          elev,
           cumDistKm: Number(cumulativeDistance.toFixed(4)),
-          cumTimeMin: cumulativeTimeMin
         });
       }
 
-      // Calculate predicted total time
       const predictedHours = (lengthKm / config.avgSpeedKmh) + (elevationGain / config.ascentMetersPerHour);
 
       stats = {
         length_km: Number(lengthKm.toFixed(3)),
         elevation_gain_m: Math.round(elevationGain),
         predicted_time_h: Number(predictedHours.toFixed(2)),
-        cumulative
+        cumulative,
       };
 
-      // Add computed properties to the feature
-      if (!mainFeature.properties) mainFeature.properties = {};
-      mainFeature.properties.computed = {
+      if (!lineFeature.properties) lineFeature.properties = {};
+      lineFeature.properties.computed = {
         ...stats,
         imported_at: new Date().toISOString(),
-        source: 'native-download',
-        sourcePath: localPath
+        sourcePath: localPath,
       };
+    } catch (err) {
+      // don't fail whole op if stats calc fails
+      console.warn('Stats calculation failed', err);
     }
   }
 
-  // Create route entry
+  // Build route entry
   const routeId = `route_${Date.now()}`;
-  const routeName = (geojson.features && geojson.features[0] &&
-    (geojson.features[0].properties?.name || geojson.features[0].properties?.title)) ||
-    localPath.split('/').pop();
+  const routeName = (features[0] && features[0].properties && (features[0].properties.name || features[0].properties.title)) || (localPath ? localPath.split('/').pop() : routeId);
 
   const routeEntry = {
     id: routeId,
     name: routeName,
     localFile: localPath,
     geojson,
-    stats
+    stats,
+    markers, // <- markers array for UI
+    addedAt: new Date().toISOString(),
   };
 
-  // Save to storage
-  const existingRoutes = await loadData(CONFIG.STORAGE_KEYS.ROUTES) || [];
-  existingRoutes.push(routeEntry);
-  await saveData(CONFIG.STORAGE_KEYS.ROUTES, existingRoutes);
+  // save to storage
+  try {
+    const existingRoutes = await loadData(CONFIG.STORAGE_KEYS.ROUTES) || [];
+    existingRoutes.push(routeEntry);
+    await saveData(CONFIG.STORAGE_KEYS.ROUTES, existingRoutes);
+  } catch (err) {
+    console.warn('Failed to save route to storage', err);
+  }
 
   return routeEntry;
 }
 
 /**
- * Download, parse, and save GPX route in one operation
- * @param {string} url - URL of the GPX file
- * @param {string} filename - Name for the local file
- * @param {Function} onProgress - Progress callback function
- * @param {Object} options - Parsing options
- * @returns {Promise<Object>} Route entry
+ * Сохраняет маршрут в GPX (экспорт)
  */
+export function generateGpxContent(routeData) {
+  const { points, name = 'Generated Route', description = '' } = routeData;
+  if (!points || !Array.isArray(points) || points.length === 0) {
+    throw new Error('No points to generate GPX');
+  }
+  const now = new Date().toISOString();
+  let gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="AiPine Maps" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${name}</name><desc>${description}</desc><time>${now}</time></metadata>
+  <trk><name>${name}</name><trkseg>\n`;
+  points.forEach((p) => {
+    const t = p.timestamp ? new Date(p.timestamp).toISOString() : now;
+    gpx += `    <trkpt lat="${p.latitude}" lon="${p.longitude}"><ele>${p.altitude || 0}</ele><time>${t}</time></trkpt>\n`;
+  });
+  gpx += `  </trkseg></trk>\n</gpx>`;
+  return gpx;
+}
+
+export async function saveRouteAsGpx(routeData, filename = null) {
+  const directory = `${RNFS.DocumentDirectoryPath}/gpx`;
+  await RNFS.mkdir(directory).catch(() => {});
+  const fileName = filename || `route_${Date.now()}.gpx`;
+  const localPath = `${directory}/${fileName}`;
+  const gpxContent = generateGpxContent(routeData);
+  await RNFS.writeFile(localPath, gpxContent, 'utf8');
+  return localPath;
+}
+
 export async function downloadParseAndSave(url, filename, onProgress, options) {
   const localPath = await downloadGpxToLocal(url, filename, onProgress);
-  const routeEntry = await parseGpxFileAndSave(localPath, options);
-  return routeEntry;
+  return await parseGpxFileAndSave(localPath, options);
 }

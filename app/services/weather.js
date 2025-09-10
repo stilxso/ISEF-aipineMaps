@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { CONFIG } from '../config/env';
+// тут логируем загрузку конфига для погоды
 console.log('Weather service: CONFIG loaded =', CONFIG);
 
 // Constants

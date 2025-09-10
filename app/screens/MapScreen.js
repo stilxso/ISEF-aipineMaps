@@ -1,10 +1,11 @@
-// app/screens/MapScreen.js
+// экран карты с маршрутами и пиками
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, FlatList, Alert, Switch } from 'react-native';
 import MapBoxMapView from '../components/MapBoxMapView';
 import { useRoutes } from '../contexts/RoutesContext';
 import { useRecorder } from '../contexts/RecorderContext';
 import { useLocation } from '../contexts/LocationContext';
+import { getPeaks } from '../services/peaks';
 
 export default function MapScreen() {
   const { records, addRoute } = useRoutes();
@@ -14,6 +15,7 @@ export default function MapScreen() {
   const [enable3D, setEnable3D] = useState(false);
   const [selected, setSelected] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [peaks, setPeaks] = useState([]);
 
   const liveRoute = useMemo(() => {
     if (!current?.points?.length) return null;
@@ -44,8 +46,28 @@ export default function MapScreen() {
     return [currentLocation?.longitude || 76.8512, currentLocation?.latitude || 43.2389];
   }, [current, selected, currentLocation]);
 
+  const peakMarkers = useMemo(() => {
+    return peaks.map(peak => ({
+      id: peak.id,
+      title: peak.title,
+      latitude: peak.latitude,
+      longitude: peak.longitude,
+      gpxUrl: peak.gpxUrl,
+      type: 'peak'
+    }));
+  }, [peaks]);
+
   useEffect(() => {
-    // placeholder for peaks/places load if needed
+    const loadPeaks = async () => {
+      try {
+        const peaksData = await getPeaks();
+        setPeaks(peaksData);
+        console.log('Peaks loaded:', peaksData.length);
+      } catch (error) {
+        console.warn('Failed to load peaks:', error);
+      }
+    };
+    loadPeaks();
   }, []);
 
   const onMarkerPress = async (marker) => {
@@ -57,7 +79,6 @@ export default function MapScreen() {
       buttons.push({ text: 'Скачать', onPress: async () => {
         setDownloading(true);
         try {
-          // example: fetch and parse gpX then addRoute
           // for now create a dummy route (as fallback)
           const entry = {
             id: `srv_${Date.now()}`,
@@ -84,7 +105,7 @@ export default function MapScreen() {
     <View style={styles.container}>
       <MapBoxMapView
         routes={allRoutes}
-        markers={[]}
+        markers={peakMarkers}
         centerCoordinate={center}
         zoomLevel={13}
         enable3D={enable3D}
@@ -158,7 +179,7 @@ const styles = StyleSheet.create({
   btnSave: { backgroundColor: '#16a34a' },
   btnGhost: { backgroundColor: '#1a2145', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   listWrap: {
-    position: 'absolute', bottom: 16, left: 16, right: 16,
+    position: 'absolute', bottom: 100, left: 16, right: 16,
     backgroundColor: 'rgba(11,13,42,0.92)', borderRadius: 14,
     padding: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)'
   },

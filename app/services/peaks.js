@@ -2,7 +2,7 @@ import axios from 'axios';
 import { CONFIG } from '../config/env';
 import localPeaks from '../data/mountains.json';
 
-// нормализуем пики из разных форматов
+// тут нормализуем пики из разных форматов
 function normalize(peaks) {
   if (!Array.isArray(peaks)) return [];
   return peaks
@@ -29,7 +29,7 @@ function normalize(peaks) {
     .filter(Boolean);
 }
 
-// получаем пики с сервера или локально
+// тут получаем пики с сервера или из локальных данных
 export async function getPeaks() {
   const source = CONFIG.MOUNTAINS_SOURCE || 'local';
   if (source === 'remote') {

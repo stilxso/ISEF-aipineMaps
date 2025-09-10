@@ -1,4 +1,4 @@
-// app/screens/ProfileScreen.js
+// экран профиля с настройками
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Switch, Alert, ScrollView } from 'react-native';
 import { useSettings } from '../contexts/SettingsContext';

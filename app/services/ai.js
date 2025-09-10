@@ -1,7 +1,7 @@
 import * as turf from '@turf/turf';
 
 const DEFAULT_AVG_SPEED_KMH = 5;
-// функция для расчета статистики маршрута, проверяй GeoJSON
+// тут функция для расчета статистики маршрута из GeoJSON
 const DEFAULT_ASCENT_METERS_PER_HOUR = 300;
 
 export function routeStatsFromGeojson(geojson) {
@@ -11,9 +11,9 @@ export function routeStatsFromGeojson(geojson) {
       geojson?.features?.[0];
 
     if (!feature?.geometry?.coordinates?.length) return null;
-// здесь рассчитываем длину и подъем
+    // тут рассчитываем длину и подъем
 
-         const lengthKm = turf.length(feature, { units: 'kilometers' });
+          const lengthKm = turf.length(feature, { units: 'kilometers' });
 
          let elevationGain = 0;
     let previousElevation = null;
@@ -49,8 +49,8 @@ export function generateAdvice(route, ctx = {}) {
   const lengthKm = stats.length_km || 0;
   const elevationGainM = stats.elevation_gain_m || 0;
 
-// генерирует советы для похода, учитывай погоду
-     const weather = ctx.weather || {};
+// тут генерирует советы для похода с учетом погоды
+      const weather = ctx.weather || {};
   const windSpeed = weather.windSpeed || 0;
   const temperature = weather.temperature || 10;
 
@@ -99,4 +99,4 @@ export function generateAdvice(route, ctx = {}) {
 
   return adviceText;
 }
-// возвращаем готовый текст с советами
+  // тут возвращаем готовый текст с советами

@@ -57,7 +57,14 @@ export async function generateAdviceWithGemini(route, weather, opts = {}) {
   const language = opts.language || 'ru'; // Default to Russian
   const url = `${GEMINI_ENDPOINT}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-  const prompt = buildPrompt(route, weather, language);
+  let prompt;
+  if (opts.prompt) {
+    // Используем кастомный промпт для чата
+    prompt = opts.prompt;
+  } else {
+    // Используем стандартный промпт для маршрутов
+    prompt = buildPrompt(route, weather, language);
+  }
 
   const payload = {
     contents: [
@@ -78,5 +85,5 @@ export async function generateAdviceWithGemini(route, weather, opts = {}) {
   const parts = candidates[0]?.content?.parts || [];
   const text = parts.map((p) => p?.text).filter(Boolean).join('\n').trim();
 
-  return text || 'Совет не сгенерирован.';
+  return text || 'Ответ не сгенерирован.';
 }

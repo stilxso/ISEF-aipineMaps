@@ -40,19 +40,19 @@ export function RecorderProvider({ children }) {
 
   const save = useCallback(async () => {
     if (!current.points.length) return null;
-    // build geojson
+    // тут строим geojson из точек маршрута
     const coords = current.points.map(p => [p.longitude ?? p.longitude, p.latitude ?? p.latitude, p.altitude ?? null]);
     const entry = {
       id: `rec_${Date.now()}`,
       name: `Track ${new Date().toLocaleString()}`,
       createdAt: new Date().toISOString(),
-      stats: { length_km: ((coords.length * 0.01) || 0).toFixed(1) }, // lightweight estimate
+      stats: { length_km: ((coords.length * 0.01) || 0).toFixed(1) }, // примерная длина
       geojson: {
         type: 'FeatureCollection',
         features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } }],
       },
     };
-    // add to routes context
+    // добавляем маршрут в контекст
     addRoute(entry);
     setCurrent({ points: [] });
     return entry;
