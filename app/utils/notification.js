@@ -1,42 +1,42 @@
 import PushNotification from 'react-native-push-notification';
 import { Platform } from 'react-native';
 
-// Configure push notifications
+
 export const configureNotifications = () => {
   PushNotification.configure({
-    // Called when token is generated
+    
     onRegister: function (token) {
       console.log('TOKEN:', token);
     },
 
-    // Called when a remote or local notification is opened or received
+    
     onNotification: function (notification) {
       console.log('NOTIFICATION:', notification);
 
-      // Handle notification tap
+      
       if (notification.userInteraction) {
         handleNotificationTap(notification);
       }
     },
 
-    // Android only: GCM or FCM Sender ID
-    senderID: 'YOUR_FCM_SENDER_ID', // TODO: Configure this
+    
+    senderID: 'YOUR_FCM_SENDER_ID', 
 
-    // iOS only
+    
     permissions: {
       alert: true,
       badge: true,
       sound: true,
     },
 
-    // Should the initial notification be popped automatically
+    
     popInitialNotification: true,
 
-    // Default notification properties
+    
     requestPermissions: Platform.OS === 'ios',
   });
 
-  // Create notification channel for Android
+  
   if (Platform.OS === 'android') {
     PushNotification.createChannel(
       {
@@ -45,7 +45,7 @@ export const configureNotifications = () => {
         channelDescription: 'Notifications for emergency alerts and control times',
         playSound: true,
         soundName: 'default',
-        importance: 4, // High importance
+        importance: 4, 
         vibrate: true,
       },
       (created) => console.log(`Emergency channel created: ${created}`)
@@ -66,7 +66,7 @@ export const configureNotifications = () => {
   }
 };
 
-// Show local notification
+
 export const showLocalNotification = (
   title,
   message,
@@ -91,7 +91,7 @@ export const showLocalNotification = (
   return notificationId;
 };
 
-// Show control time notification
+
 export const showControlTimeNotification = (controlId, eta, gracePeriod) => {
   const etaDate = new Date(eta);
   const message = `Control time reached at ${etaDate.toLocaleTimeString()}. Please confirm you are safe.`;
@@ -107,12 +107,12 @@ export const showControlTimeNotification = (controlId, eta, gracePeriod) => {
     },
     {
       channelId: 'control-time-channel',
-      ongoing: true, // Can't be dismissed until acknowledged
+      ongoing: true, 
     }
   );
 };
 
-// Show emergency alert notification
+
 export const showEmergencyNotification = (alertData) => {
   const message = alertData.location
     ? `Emergency alert sent from location: ${alertData.location.latitude.toFixed(4)}, ${alertData.location.longitude.toFixed(4)}`
@@ -133,7 +133,7 @@ export const showEmergencyNotification = (alertData) => {
   );
 };
 
-// Show queued alert notification
+
 export const showQueuedNotification = (alertCount) => {
   const message = `${alertCount} emergency alert${alertCount > 1 ? 's' : ''} queued for sending when online.`;
 
@@ -151,27 +151,27 @@ export const showQueuedNotification = (alertCount) => {
   );
 };
 
-// Handle notification tap
+
 const handleNotificationTap = (notification) => {
   const { userInfo } = notification;
 
   switch (userInfo?.type) {
     case 'control_time':
-      // Navigate to emergency screen or show modal
+      
       console.log('Control time notification tapped:', userInfo.controlId);
-      // TODO: Navigate to appropriate screen
+      
       break;
 
     case 'emergency_sent':
-      // Navigate to alerts history
+      
       console.log('Emergency sent notification tapped:', userInfo.alertId);
-      // TODO: Navigate to alerts screen
+      
       break;
 
     case 'alert_queued':
-      // Navigate to queue status
+      
       console.log('Queued alert notification tapped');
-      // TODO: Navigate to queue screen
+      
       break;
 
     default:
@@ -179,17 +179,17 @@ const handleNotificationTap = (notification) => {
   }
 };
 
-// Cancel specific notification
+
 export const cancelNotification = (notificationId) => {
   PushNotification.cancelLocalNotification(notificationId);
 };
 
-// Cancel all notifications
+
 export const cancelAllNotifications = () => {
   PushNotification.cancelAllLocalNotifications();
 };
 
-// Get notification permissions status
+
 export const checkNotificationPermissions = async () => {
   return new Promise((resolve) => {
     PushNotification.checkPermissions((permissions) => {
@@ -198,7 +198,7 @@ export const checkNotificationPermissions = async () => {
   });
 };
 
-// Request notification permissions
+
 export const requestNotificationPermissions = async () => {
   return new Promise((resolve) => {
     PushNotification.requestPermissions().then((permissions) => {
@@ -207,7 +207,7 @@ export const requestNotificationPermissions = async () => {
   });
 };
 
-// Schedule a delayed notification
+
 export const scheduleNotification = (
   title,
   message,

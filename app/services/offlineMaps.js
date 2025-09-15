@@ -1,15 +1,30 @@
 
 import RNFS from 'react-native-fs';
+import ReactNativeBlobUtil from 'react-native-blob-util';
 import { CONFIG } from '../config/env';
+
+if (!RNFS.DocumentDirectoryPath) {
+  console.error('RNFS.DocumentDirectoryPath is null or undefined');
+  throw new Error('DocumentDirectoryPath not available for offline maps');
+}
 
 const OFFLINE_MAPS_DIR = `${RNFS.DocumentDirectoryPath}/offline-maps`;
 
 
 export async function createOfflineMapsDirectory() {
   try {
-    const exists = await RNFS.exists(OFFLINE_MAPS_DIR);
+    console.log('DEBUG offlineMaps: OFFLINE_MAPS_DIR =', OFFLINE_MAPS_DIR);
+    console.log('DEBUG offlineMaps: RNFS.DocumentDirectoryPath =', RNFS.DocumentDirectoryPath);
+    if (!OFFLINE_MAPS_DIR || typeof OFFLINE_MAPS_DIR !== 'string') {
+      console.error('DEBUG offlineMaps: Invalid OFFLINE_MAPS_DIR:', OFFLINE_MAPS_DIR);
+      return false;
+    }
+    const exists = await ReactNativeBlobUtil.fs.exists(OFFLINE_MAPS_DIR);
+    console.log('DEBUG offlineMaps: Directory exists check:', exists);
     if (!exists) {
-      await RNFS.mkdir(OFFLINE_MAPS_DIR);
+      console.log('DEBUG offlineMaps: Creating directory:', OFFLINE_MAPS_DIR);
+      await ReactNativeBlobUtil.fs.mkdir(OFFLINE_MAPS_DIR);
+      console.log('DEBUG offlineMaps: Directory created successfully');
     }
     return true;
   } catch (error) {
@@ -23,11 +38,9 @@ export async function downloadMapTile(zoom, x, y, style = 'satellite') {
     if (!CONFIG.MAPBOX_DOWNLOADS_TOKEN) throw new Error('Missing MAPBOX_DOWNLOADS_TOKEN');
 
     const tileUrl = `https://api.mapbox.com/styles/v1/mapbox/${style}-v9/tiles/${zoom}/${x}/${y}@2x?access_token=${CONFIG.MAPBOX_DOWNLOADS_TOKEN}`;
-    const localPath = `${OFFLINE_MAPS_DIR}/${style}/${zoom}/${x}/${y}.png`;
-    const tileDir = localPath.substring(0, localPath.lastIndexOf('/'));
+    const localPath = `${OFFLINE_MAPS_DIR}/${style}_${zoom}_${x}_${y}.png`;
 
-    const dirExists = await RNFS.exists(tileDir);
-    if (!dirExists) await RNFS.mkdir(tileDir, { recursive: true });
+    console.log('DEBUG offlineMaps: localPath =', localPath);
 
     const res = await RNFS.downloadFile({
       fromUrl: tileUrl,
@@ -39,7 +52,7 @@ export async function downloadMapTile(zoom, x, y, style = 'satellite') {
     if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
       return localPath;
     } else {
-      // cleanup failed file if created
+      
       try { await RNFS.unlink(localPath); } catch (_) {}
       throw new Error(`Tile HTTP ${res.statusCode}`);
     }
@@ -49,9 +62,6 @@ export async function downloadMapTile(zoom, x, y, style = 'satellite') {
   }
 }
 
-/**
- * тут вычисляем индексы тайлов для покрытия границ
- */
 function latLngToTile(lat, lng, zoom) {
   const n = Math.pow(2, zoom);
   const x = Math.floor(((lng + 180) / 360) * n);
@@ -84,9 +94,6 @@ function getTilesInBounds(bounds, zoom) {
   return tiles;
 }
 
-/**
- * тут сохраняем метаданные региона и пути к тайлам
- */
 async function saveRegionInfo(centerLat, centerLng, zoom, radiusKm, style, tilePaths) {
   try {
     const meta = {
@@ -121,9 +128,6 @@ async function saveRegionInfo(centerLat, centerLng, zoom, radiusKm, style, tileP
   }
 }
 
-/**
- * публичная функция: скачиваем регион, возвращаем детали прогресса
- */
 export async function downloadMapRegion(centerLat, centerLng, zoom, radiusKm = 5, style = 'satellite', onProgress = () => {}) {
   try {
     await createOfflineMapsDirectory();
@@ -191,7 +195,7 @@ export async function deleteRegion(regionId) {
 
 export async function getOfflineTilePath(zoom, x, y, style = 'satellite') {
   try {
-    const localPath = `${OFFLINE_MAPS_DIR}/${style}/${zoom}/${x}/${y}.png`;
+    const localPath = `${OFFLINE_MAPS_DIR}/${style}_${zoom}_${x}_${y}.png`;
     const exists = await RNFS.exists(localPath);
     return exists ? localPath : null;
   } catch (e) {

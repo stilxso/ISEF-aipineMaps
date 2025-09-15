@@ -14,7 +14,6 @@ import { useSos } from '../contexts/SosContext';
 export default function EmergencyCenterScreen() {
   const { alertsHistory, pendingAlerts, clearHistory, clearPending } = useSos();
 
-  // Combine and sort alerts by timestamp (newest first)
   const allAlerts = useMemo(() => {
     const combined = [
       ...alertsHistory.map(alert => ({ ...alert, status: 'sent' })),
@@ -23,7 +22,6 @@ export default function EmergencyCenterScreen() {
     return combined.sort((a, b) => b.timestamp - a.timestamp);
   }, [alertsHistory, pendingAlerts]);
 
-  // Create markers for map
   const alertMarkers = useMemo(() => {
     return allAlerts
       .filter(alert => alert.location?.latitude && alert.location?.longitude)
@@ -37,13 +35,12 @@ export default function EmergencyCenterScreen() {
       }));
   }, [allAlerts]);
 
-  // Map center based on latest alert
   const mapCenter = useMemo(() => {
     if (alertMarkers.length > 0) {
       const latest = alertMarkers[0];
       return [latest.longitude, latest.latitude];
     }
-    return [76.8512, 43.2389]; // Default center
+    return [76.8512, 43.2389]; 
   }, [alertMarkers]);
 
   const handleAlertPress = (alert) => {
@@ -118,7 +115,7 @@ export default function EmergencyCenterScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Map View */}
+
       <View style={styles.mapContainer}>
         <MapBoxMapView
           routes={[]}
@@ -129,7 +126,7 @@ export default function EmergencyCenterScreen() {
         />
       </View>
 
-      {/* Alerts List */}
+
       <View style={styles.listContainer}>
         <View style={styles.header}>
           <Text style={styles.title}>Emergency Alerts</Text>

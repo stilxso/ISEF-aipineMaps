@@ -1,7 +1,7 @@
-// тут импортируем AsyncStorage для работы с хранилищем
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// функция для загрузки данных из хранилища
+
 export async function loadData(key) {
   try {
     const raw = await AsyncStorage.getItem(key);
@@ -13,7 +13,7 @@ export async function loadData(key) {
   }
 }
 
-// функция для сохранения данных в хранилище
+
 export async function saveData(key, value) {
   try {
     await AsyncStorage.setItem(key, JSON.stringify(value));
@@ -24,7 +24,7 @@ export async function saveData(key, value) {
   }
 }
 
-// функция для удаления данных из хранилища
+
 export async function removeData(key) {
   try {
     await AsyncStorage.removeItem(key);

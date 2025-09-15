@@ -3,8 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { useLocation } from './LocationContext';
 import { sendAlert, flushQueue } from '../services/emergency';
-import { scheduleControlTime, clearControlTime } from '../services/controlTime';
+import { scheduleControlTime, clearControlTime, setSosCallback } from '../services/controlTime';
 import { showLocalNotification } from '../utils/notification';
+
+const API_BASE_URL = 'https://api.aipinemaps.com'; 
 
 const SosContext = createContext();
 
@@ -21,25 +23,33 @@ export function SosProvider({ children }) {
   const { currentLocation, heading, speed, accuracy } = useLocation();
   const isOnlineRef = useRef(true);
 
-  // тут загружаем данные из хранилища при старте
+  
   useEffect(() => {
     loadStoredData();
-  }, []);
+    
+    console.log('[SOS] Setting up SOS callback for auto-SOS functionality');
+    setSosCallback(async (payload) => {
+      console.log('[SOS] Auto-SOS callback triggered:', payload);
+      const result = await sendSOS(payload);
+      console.log('[SOS] Auto-SOS result:', result);
+      return result;
+    });
+  }, [sendSOS]);
 
-  // здесь отслеживаем подключение к сети
+  
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       const wasOnline = isOnlineRef.current;
       isOnlineRef.current = state.isConnected;
 
-      // если вернулось подключение, отправляем отложенные алерты
+      
       if (!wasOnline && state.isConnected) {
         queueFlush();
       }
     });
 
     return unsubscribe;
-  }, []);
+  }, [queueFlush]);
 
   const loadStoredData = async () => {
     try {
@@ -86,7 +96,7 @@ export function SosProvider({ children }) {
       id: Date.now().toString(),
       routeId,
       eta: new Date(eta).getTime(),
-      gracePeriod: options.gracePeriod || 5 * 60 * 1000, // 5 minutes default
+      gracePeriod: options.gracePeriod || 5 * 60 * 1000, 
       contacts: options.contacts || [],
       createdAt: Date.now(),
       acknowledged: false,
@@ -96,7 +106,7 @@ export function SosProvider({ children }) {
     setControlTimes(newControlTimes);
     await saveControlTimes(newControlTimes);
 
-    // Schedule the timer
+    
     scheduleControlTime(controlTime.id, controlTime.eta, controlTime.gracePeriod, () => {
       handleControlTimeReached(controlTime);
     });
@@ -111,27 +121,61 @@ export function SosProvider({ children }) {
     setControlTimes(updatedTimes);
     await saveControlTimes(updatedTimes);
 
-    // Clear the timer
+    
     clearControlTime(controlId);
   };
 
-  const handleControlTimeReached = (controlTime) => {
-    // тут показываем локальное уведомление
+  const handleControlTimeReached = async (controlTime) => {
+    console.log('[SOS] Control time reached for:', controlTime.id);
+
+    
     showLocalNotification(
       'Control Time Reached',
       'Your control time has been reached. Please confirm you are safe.',
       { controlId: controlTime.id }
     );
 
-    // EmergencyToast покажется при тапе на уведомление
+    
+    try {
+      const alertData = {
+        controlTimeId: controlTime.id,
+        routeId: controlTime.routeId,
+        batteryLevel: 50, 
+        terrainDifficulty: 2 
+      };
+
+      
+      console.log('[SOS] Creating checkin missed alert with data:', alertData);
+
+      const response = await fetch(`${API_BASE_URL}/api/alerts/checkin-missed`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          
+        },
+        body: JSON.stringify(alertData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[SOS] Checkin missed alert created successfully:', {
+          alertId: result._id,
+          riskAssessment: result.riskAssessment,
+          predictedLocation: result.predictedLocation
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('[SOS] Failed to create checkin missed alert:', response.status, errorText);
+      }
+    } catch (error) {
+      console.warn('Error creating checkin missed alert:', error);
+    }
+
+    
   };
 
   const sendSOS = async (payload = {}) => {
     const alertData = {
-      id: Date.now().toString(),
-      userId: 'currentUser', // тут потом взять из контекста авторизации
-      routeId: payload.routeId,
-      timestamp: Date.now(),
       location: {
         latitude: currentLocation?.latitude,
         longitude: currentLocation?.longitude,
@@ -140,33 +184,61 @@ export function SosProvider({ children }) {
         heading,
         speed,
       },
-      routeExcerpt: payload.routeExcerpt || [],
-      plannedRoute: payload.plannedRoute || {},
-      contacts: payload.contacts || [],
-      batteryLevel: payload.batteryLevel,
+      routeId: payload.routeId,
+      batteryLevel: payload.batteryLevel || 50,
+      terrainDifficulty: payload.terrainDifficulty || 2,
       ...payload,
     };
 
-    // Add to pending alerts
-    const newPending = [...pendingAlerts, alertData];
+    console.log('[SOS] Sending SOS alert with data:', {
+      location: alertData.location,
+      batteryLevel: alertData.batteryLevel,
+      terrainDifficulty: alertData.terrainDifficulty,
+      routeId: alertData.routeId
+    });
+
+    
+    const newPending = [...pendingAlerts, { ...alertData, id: Date.now().toString(), timestamp: Date.now() }];
     setPendingAlerts(newPending);
     await savePendingAlerts(newPending);
 
-    // Try to send immediately if online
+    
     if (isOnlineRef.current) {
       try {
-        await sendAlert(alertData);
-        // Success: move to history
-        const newHistory = [alertData, ...alertsHistory];
-        setAlertsHistory(newHistory);
-        await saveAlertsHistory(newHistory);
+        const response = await fetch(`${API_BASE_URL}/api/alerts/sos`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            
+          },
+          body: JSON.stringify(alertData)
+        });
 
-        // Remove from pending
-        const updatedPending = pendingAlerts.filter(a => a.id !== alertData.id);
-        setPendingAlerts(updatedPending);
-        await savePendingAlerts(updatedPending);
+        if (response.ok) {
+          const result = await response.json();
 
-        return { success: true, message: 'Alert sent successfully' };
+          console.log('[SOS] SOS alert sent successfully:', {
+            alertId: result._id,
+            riskAssessment: result.riskAssessment,
+            predictedLocation: result.predictedLocation
+          });
+
+          
+          const newHistory = [{ ...alertData, id: result.id, serverId: result._id }, ...alertsHistory];
+          setAlertsHistory(newHistory);
+          await saveAlertsHistory(newHistory);
+
+          
+          const updatedPending = pendingAlerts.filter(a => a.id !== alertData.id);
+          setPendingAlerts(updatedPending);
+          await savePendingAlerts(updatedPending);
+
+          return { success: true, message: 'Alert sent successfully with ML predictions' };
+        } else {
+          const errorText = await response.text();
+          console.error('[SOS] Failed to send SOS alert:', response.status, errorText);
+          throw new Error('Failed to send alert');
+        }
       } catch (error) {
         console.warn('Failed to send alert:', error);
         return { success: false, message: 'Failed to send, queued for later' };
@@ -181,7 +253,7 @@ export function SosProvider({ children }) {
 
     const results = await flushQueue(pendingAlerts);
 
-    // Move successfully sent alerts to history
+    
     const sentIds = results.filter(r => r.success).map(r => r.id);
     const sentAlerts = pendingAlerts.filter(a => sentIds.includes(a.id));
 

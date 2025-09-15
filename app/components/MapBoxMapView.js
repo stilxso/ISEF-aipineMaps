@@ -1,4 +1,4 @@
-// компонент карты MapBox
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Alert } from 'react-native';
 import { CONFIG } from '../config/env';
@@ -6,8 +6,8 @@ import { CONFIG } from '../config/env';
 const DEFAULT_CENTER = [76.8512, 43.2389];
 
 export default function MapBoxMapView({
-  routes = [],              // [{ id, color, width, geojson }]
-  markers = [],             // [{ id, type, latitude, longitude, heading, title, subtitle, altitude }]
+  routes = [],
+  markers = [],
   centerCoordinate,
   zoomLevel = CONFIG?.MAP_ZOOM_LEVEL ?? 13,
   style = { flex: 1 },
@@ -20,6 +20,7 @@ export default function MapBoxMapView({
 }) {
   const [MapboxGL, setMapboxGL] = useState(null);
   const [error, setError] = useState(null);
+  const [currentStyle, setCurrentStyle] = useState('mapbox://styles/mapbox/outdoors-v12');
   const mapRef = useRef(null);
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export default function MapBoxMapView({
 
     (async () => {
       try {
-        const mod = require('@rnmapbox/maps'); // ensure package installed
+        const mod = require('@rnmapbox/maps'); 
         const token = CONFIG?.MAPBOX_ACCESS_TOKEN;
         if (!token || token.includes('YOUR_MAPBOX')) {
           const msg = 'Mapbox token missing or placeholder. Add CONFIG.MAPBOX_ACCESS_TOKEN in app/config/env.js';
@@ -64,7 +65,6 @@ export default function MapBoxMapView({
     if (!geojson) return { type: 'FeatureCollection', features: [] };
     if (geojson.type === 'FeatureCollection') return geojson;
     if (geojson.type === 'Feature') return { type: 'FeatureCollection', features: [geojson] };
-    // fallback: assume it's geometry
     return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: geojson }] };
   };
 
@@ -103,7 +103,7 @@ export default function MapBoxMapView({
   };
 
   const normalizeMarker = (m, idx) => {
-    // accept [lon,lat] arrays or objects
+
     const lon = (typeof m.longitude === 'number') ? m.longitude : (Array.isArray(m) ? m[0] : m.lon ?? m.lng ?? m[0]);
     const lat = (typeof m.latitude === 'number') ? m.latitude : (Array.isArray(m) ? m[1] : m.lat ?? m[1]);
     return { ...m, longitude: lon, latitude: lat, id: m.id ?? `marker-${idx}` };
@@ -144,6 +144,12 @@ export default function MapBoxMapView({
             <Text style={styles.peakText}>⛰️</Text>
           </View>
         );
+      case 'cluster':
+        return (
+          <View style={styles.clusterMarker}>
+            <Text style={styles.clusterText}>{m.count || 0}</Text>
+          </View>
+        );
       case 'route-main':
         return (
           <View style={styles.routeMainMarker}>
@@ -159,12 +165,28 @@ export default function MapBoxMapView({
     }
   };
 
-  if (!MapboxGL) {
+  if (!MapboxGL || error) {
     return (
       <View style={[styles.fallbackContainer, style]}>
         <Text style={styles.fallbackTitle}>Карта недоступна</Text>
         <Text style={styles.fallbackText}>{error || 'Инициализация Mapbox...'}</Text>
-        <Text style={styles.fallbackHint}>Если видите 401 — проверьте MAPBOX_ACCESS_TOKEN в app/config/env.js</Text>
+        <Text style={styles.fallbackHint}>
+          {error?.includes('401') ? 'Проверьте MAPBOX_ACCESS_TOKEN в app/config/env.js' :
+           error?.includes('api.mapbox.com') ? 'Проблема с сетью - проверьте интернет соединение' :
+           'Попробуйте перезапустить приложение'}
+        </Text>
+        <View style={styles.markerList}>
+          <Text style={styles.markerListTitle}>Доступные маркеры:</Text>
+          {Array.isArray(markers) && markers.length > 0 ? (
+            markers.map((marker, idx) => (
+              <Text key={idx} style={styles.markerItem}>
+                • {marker.title || marker.id} ({marker.type})
+              </Text>
+            ))
+          ) : (
+            <Text style={styles.markerItem}>Нет маркеров для отображения</Text>
+          )}
+        </View>
       </View>
     );
   }
@@ -174,20 +196,36 @@ export default function MapBoxMapView({
       <MapboxGL.MapView
         ref={mapRef}
         style={styles.map}
-        styleURL={enable3D ? (MapboxGL.StyleURL?.Satellite ?? 'mapbox://styles/mapbox/satellite-v9') : (MapboxGL.StyleURL?.Street ?? 'mapbox://styles/mapbox/streets-v11')}
-        pitchEnabled={enable3D}
-        rotateEnabled
-        zoomEnabled
+        styleURL={currentStyle}
+        pitchEnabled={true}
+        rotateEnabled={true}
+        zoomEnabled={true}
         onDidFailLoadingMap={(e) => {
-          const msg = e?.error?.message || JSON.stringify(e) || 'Map load failed';
-          if (String(msg).includes('401') || String(msg).toLowerCase().includes('unauthorized')) {
-            setError('Ошибка 401: неверный Mapbox token. Проверьте app/config/env.js');
-            Alert.alert('Ошибка карты', '401 — неверный Mapbox token. Проверьте конфигурацию.');
-          } else {
-            setError(String(msg));
-            console.warn('Map load error', msg);
-          }
-        }}
+           const msg = e?.error?.message || JSON.stringify(e) || 'Map load failed';
+           console.error('MapBox load error:', msg);
+
+           if (String(msg).includes('401') || String(msg).toLowerCase().includes('unauthorized')) {
+             setError('Ошибка 401: неверный Mapbox token. Проверьте app/config/env.js');
+             Alert.alert('Ошибка карты', '401 — неверный Mapbox token. Проверьте конфигурацию.');
+           } else if (String(msg).includes('403') || String(msg).toLowerCase().includes('forbidden') || String(msg).toLowerCase().includes('style')) {
+             console.warn('Custom style failed, trying fallback style');
+             if (currentStyle.includes('foxylight')) {
+               console.log('Switching to default Mapbox style');
+               setCurrentStyle('mapbox://styles/mapbox/streets-v12');
+               setError('Переключаемся на стандартный стиль карты...');
+             } else {
+               setError('Ошибка 403: нет доступа к стилям карт. Проверьте токен Mapbox.');
+               Alert.alert('Ошибка карты', '403 — нет доступа к стилям карт. Проверьте токен Mapbox.');
+             }
+           } else {
+             setError(`Ошибка загрузки карты: ${String(msg)}`);
+             console.warn('Map load error', msg);
+           }
+         }}
+         onDidFinishLoadingMap={() => {
+           console.log('MapBox map loaded successfully');
+           setError(null);
+         }}
         onRegionDidChange={(e) => {
           const props = e?.properties || {};
           onRegionChange(props);
@@ -201,27 +239,36 @@ export default function MapBoxMapView({
         )}
 
         {showUserLocation && MapboxGL.UserLocation && (
-          <MapboxGL.UserLocation visible showsUserHeadingIndicator androidRenderMode="compass" />
+          <MapboxGL.UserLocation
+            visible
+            showsUserHeadingIndicator
+            androidRenderMode="compass"
+            puckBearingEnabled
+            puckBearing="heading"
+          />
         )}
 
         {Array.isArray(routes) && routes.map((r, i) => renderRouteLayer(r, i))}
 
         {Array.isArray(markers) && markers.map((raw, idx) => {
           const m = normalizeMarker(raw, idx);
-          console.log('DEBUG: Processing marker', idx, m);
+          console.log('DEBUG MapBox: Processing marker', idx, m);
           if (typeof m.latitude !== 'number' || typeof m.longitude !== 'number') {
-            console.log('DEBUG: Invalid marker coordinates', m);
+            console.log('DEBUG MapBox: Invalid marker coordinates', m);
             return null;
           }
           const coord = [m.longitude, m.latitude];
           const id = String(m.id);
-          console.log('DEBUG: Rendering marker', id, 'at', coord);
+          console.log('DEBUG MapBox: Rendering marker', id, 'at', coord, 'type:', m.type);
           return (
             <MapboxGL.PointAnnotation
               key={id}
               id={id}
               coordinate={coord}
-              onSelected={() => onMarkerPress && onMarkerPress(m)}
+              onSelected={() => {
+                console.log('DEBUG MapBox: Marker selected', m);
+                onMarkerPress && onMarkerPress(m);
+              }}
             >
               {renderMarkerView(m)}
               { (m.title || m.subtitle) && (
@@ -281,6 +328,19 @@ const styles = StyleSheet.create({
   },
   peakText: { fontSize: 16 },
 
+  clusterMarker: {
+    minWidth: 34,
+    height: 34,
+    paddingHorizontal: 8,
+    borderRadius: 17,
+    backgroundColor: '#2563eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff'
+  },
+  clusterText: { color: '#fff', fontWeight: '800' },
+
   routeMainMarker: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: '#ef4444',
     alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff',
@@ -300,5 +360,8 @@ const styles = StyleSheet.create({
   },
   fallbackTitle: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 8 },
   fallbackText: { color: '#fff', textAlign: 'center', marginBottom: 6 },
-  fallbackHint: { color: '#bfc7d6', fontSize: 12, textAlign: 'center' },
+  fallbackHint: { color: '#bfc7d6', fontSize: 12, textAlign: 'center', marginBottom: 16 },
+  markerList: { width: '100%', maxHeight: 200 },
+  markerListTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 8 },
+  markerItem: { color: '#93a4c8', fontSize: 14, marginBottom: 4, paddingLeft: 8 },
 });

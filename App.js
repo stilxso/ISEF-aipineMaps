@@ -1,19 +1,21 @@
-// тут импортируем реакт и навигацию
+
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-// здесь подключаем основной навигатор с табами
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import TabNavigator from './app/navigation/TabNavigator';
-// импортируем провайдеры для управления состоянием приложения
+import AuthScreen from './app/screens/AuthScreen';
+
+import { AuthProvider, useAuth } from './app/contexts/AuthContext';
 import { RoutesProvider } from './app/contexts/RoutesContext';
 import { SettingsProvider } from './app/contexts/SettingsContext';
 import { LocationProvider } from './app/contexts/LocationContext';
 import { RecorderProvider } from './app/contexts/RecorderContext';
 import { SosProvider } from './app/contexts/SosContext';
 import { NotificationProvider } from './app/contexts/NotificationContext';
+import { PeaksProvider } from './app/contexts/PeaksContext';
 
-// главная функция приложения
-export default function App() {
-  // тут оборачиваем все в провайдеры для передачи состояния
+
+function MainApp() {
   return (
     <SettingsProvider>
       <LocationProvider>
@@ -21,9 +23,11 @@ export default function App() {
           <SosProvider>
             <RoutesProvider>
               <RecorderProvider>
-                <NavigationContainer>
-                  <TabNavigator />
-                </NavigationContainer>
+                <PeaksProvider>
+                  <NavigationContainer>
+                    <TabNavigator />
+                  </NavigationContainer>
+                </PeaksProvider>
               </RecorderProvider>
             </RoutesProvider>
           </SosProvider>
@@ -32,3 +36,48 @@ export default function App() {
     </SettingsProvider>
   );
 }
+
+
+function AuthNavigator() {
+  const { login } = useAuth();
+
+  const handleAuthentication = () => {
+    
+    
+  };
+
+  return <AuthScreen onAuthentication={handleAuthentication} />;
+}
+
+
+function AppContent() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#5b6eff" />
+      </View>
+    );
+  }
+
+  return isAuthenticated ? <MainApp /> : <AuthNavigator />;
+}
+
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0b0d2a',
+  },
+});

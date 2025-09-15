@@ -1,21 +1,15 @@
-import axios from 'axios';
+import apiClient from './apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../config/api';
 
-const API_BASE_URL = 'https://api.aipinemaps.com'; // TODO: Configure this
-const ALERTS_ENDPOINT = '/api/alerts';
+const ALERTS_ENDPOINT = '/alerts';
 
 const STORAGE_KEY_QUEUE = 'emergencyQueue';
 
-// Send alert to server
+
 export const sendAlert = async (alertData) => {
   try {
-    const response = await axios.post(`${API_BASE_URL}${ALERTS_ENDPOINT}`, alertData, {
-      timeout: 10000, // 10 second timeout
-      headers: {
-        'Content-Type': 'application/json',
-        // TODO: Add auth headers if needed
-      },
-    });
+    const response = await apiClient.post(`${ALERTS_ENDPOINT}/sos`, alertData, { timeout: 10000 });
 
     return {
       success: true,
@@ -28,7 +22,7 @@ export const sendAlert = async (alertData) => {
   }
 };
 
-// Add alert to offline queue
+
 export const queueAlert = async (alertData) => {
   try {
     const existingQueue = await getQueue();
@@ -41,7 +35,7 @@ export const queueAlert = async (alertData) => {
   }
 };
 
-// Get current offline queue
+
 export const getQueue = async () => {
   try {
     const queueData = await AsyncStorage.getItem(STORAGE_KEY_QUEUE);
@@ -52,7 +46,7 @@ export const getQueue = async () => {
   }
 };
 
-// Flush queue - try to send all queued alerts
+
 export const flushQueue = async (pendingAlerts = null) => {
   const queue = pendingAlerts || await getQueue();
   if (queue.length === 0) return [];
@@ -68,14 +62,14 @@ export const flushQueue = async (pendingAlerts = null) => {
     }
   }
 
-  // Remove successfully sent alerts from queue
+  
   const failedAlerts = queue.filter((alert, index) => !results[index].success);
   await AsyncStorage.setItem(STORAGE_KEY_QUEUE, JSON.stringify(failedAlerts));
 
   return results;
 };
 
-// Clear the queue (for testing or manual cleanup)
+
 export const clearQueue = async () => {
   try {
     await AsyncStorage.removeItem(STORAGE_KEY_QUEUE);
@@ -84,7 +78,7 @@ export const clearQueue = async () => {
   }
 };
 
-// Get queue status
+
 export const getQueueStatus = async () => {
   const queue = await getQueue();
   return {
@@ -94,7 +88,7 @@ export const getQueueStatus = async () => {
   };
 };
 
-// Retry failed alerts with exponential backoff
+
 export const retryFailedAlerts = async (maxRetries = 3) => {
   const queue = await getQueue();
   const failedAlerts = queue.filter(alert => (alert.retryCount || 0) < maxRetries);
@@ -103,7 +97,7 @@ export const retryFailedAlerts = async (maxRetries = 3) => {
 
   for (const alert of failedAlerts) {
     const retryCount = (alert.retryCount || 0) + 1;
-    const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 2s, 4s, 8s
+    const delay = Math.pow(2, retryCount) * 1000; 
 
     await new Promise(resolve => setTimeout(resolve, delay));
 
@@ -111,13 +105,13 @@ export const retryFailedAlerts = async (maxRetries = 3) => {
       await sendAlert(alert);
       results.push({ success: true, id: alert.id });
     } catch (error) {
-      // Update retry count
+      
       alert.retryCount = retryCount;
       results.push({ success: false, id: alert.id, error: error.message, retryCount });
     }
   }
 
-  // Update queue with new retry counts
+  
   const updatedQueue = queue.map(alert => {
     const result = results.find(r => r.id === alert.id);
     return result ? { ...alert, retryCount: result.retryCount || alert.retryCount } : alert;

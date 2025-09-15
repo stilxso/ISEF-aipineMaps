@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSos } from '../contexts/SosContext';
 
-const CONFIRMATION_DELAY = 2000; // 2 seconds
+const CONFIRMATION_DELAY = 2000; 
 
 const SosButton = ({
   size = 'big',
@@ -30,23 +30,23 @@ const SosButton = ({
 
   const isBig = size === 'big';
 
-  // Handle SOS press
+  
   const handleSosPress = () => {
     if (disabled) return;
 
-    // Start confirmation process
+    
     setShowConfirm(true);
     setIsConfirming(true);
     setConfirmProgress(0);
 
-    // Start progress animation
+    
     Animated.timing(progressAnim, {
       toValue: 1,
       duration: CONFIRMATION_DELAY,
       useNativeDriver: false,
     }).start();
 
-    // Start countdown
+    
     let startTime = Date.now();
     const updateProgress = () => {
       const elapsed = Date.now() - startTime;
@@ -56,22 +56,22 @@ const SosButton = ({
       if (progress < 1) {
         setTimeout(updateProgress, 50);
       } else {
-        // Auto-confirm after delay
+        
         handleConfirmSOS();
       }
     };
     updateProgress();
 
-    // Set timeout for auto-confirmation
+    
     confirmTimeoutRef.current = setTimeout(() => {
       handleConfirmSOS();
     }, CONFIRMATION_DELAY);
 
-    // Haptic feedback
+    
     Vibration.vibrate(100);
   };
 
-  // Handle confirmed SOS
+  
   const handleConfirmSOS = async () => {
     if (!isConfirming) return;
 
@@ -81,14 +81,14 @@ const SosButton = ({
     progressAnim.setValue(0);
 
     try {
-      // Send SOS alert
+      
       const result = await sendSOS({
         routeId,
         contacts,
         batteryLevel: await getBatteryLevel(),
       });
 
-      // Show result feedback
+      
       if (result.success) {
         Alert.alert(
           'SOS Sent',
@@ -103,7 +103,7 @@ const SosButton = ({
         );
       }
 
-      // Call optional onPress callback
+      
       if (onPress) {
         onPress(result);
       }
@@ -116,7 +116,7 @@ const SosButton = ({
     }
   };
 
-  // Handle cancel confirmation
+  
   const handleCancelConfirm = () => {
     setIsConfirming(false);
     setShowConfirm(false);
@@ -124,7 +124,7 @@ const SosButton = ({
     progressAnim.setValue(0);
   };
 
-  // Cleanup on unmount
+  
   useEffect(() => {
     return () => {
       if (confirmTimeoutRef.current) {
@@ -156,7 +156,7 @@ const SosButton = ({
         <Text style={[styles.buttonText, { fontSize }]}>SOS</Text>
       </TouchableOpacity>
 
-      {/* Confirmation Modal */}
+      {}
       <Modal
         visible={showConfirm}
         transparent
@@ -170,7 +170,7 @@ const SosButton = ({
               This will send an emergency alert with your current location to dispatch and emergency contacts.
             </Text>
 
-            {/* Progress indicator */}
+            {}
             <View style={styles.progressContainer}>
               <Animated.View
                 style={[
@@ -211,15 +211,15 @@ const SosButton = ({
   );
 };
 
-// тут получаем уровень батареи (упрощенная версия)
+
 const getBatteryLevel = async () => {
-  // потом реализовать реальное получение уровня батареи
+  
   return null;
 };
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: '#dc2626', // Red-600
+    backgroundColor: '#dc2626', 
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',

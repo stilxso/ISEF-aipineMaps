@@ -1,6 +1,6 @@
-// тут импортируем хуки для контекста уведомлений
+
 import { createContext, useContext, useEffect, useState } from 'react';
-// здесь подключаем функции для работы с уведомлениями
+
 import {
   configureNotifications,
   showLocalNotification,
@@ -13,32 +13,32 @@ import {
   requestNotificationPermissions,
 } from '../utils/notification';
 
-// создаем контекст для уведомлений
+
 const NotificationContext = createContext();
 
-// провайдер для управления уведомлениями
+
 export function NotificationProvider({ children }) {
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // тут инициализируем уведомления при старте
+  
   useEffect(() => {
     initializeNotifications();
   }, []);
 
   const initializeNotifications = async () => {
     try {
-      // Configure push notifications
+      
       configureNotifications();
 
-      // Check permissions
+      
       const permissions = await checkNotificationPermissions();
       setPermissionsGranted(permissions.alert && permissions.badge && permissions.sound);
 
       setIsInitialized(true);
     } catch (error) {
       console.warn('Error initializing notifications:', error);
-      setIsInitialized(true); // Still mark as initialized even on error
+      setIsInitialized(true); 
     }
   };
 

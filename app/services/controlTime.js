@@ -1,26 +1,79 @@
-import BackgroundTimer from 'react-native-background-timer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 
 const STORAGE_KEY_TIMERS = 'activeControlTimers';
 let activeTimers = new Map();
+let sosCallback = null;
+let appStateSubscription = null;
 
-// Load active timers on service initialization
+
+export const setSosCallback = (callback) => {
+  sosCallback = callback;
+};
+
+
+const initializeAppStateListener = () => {
+  if (appStateSubscription) {
+    appStateSubscription.remove();
+  }
+
+  appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+    if (nextAppState === 'active') {
+      
+      checkExpiredTimers();
+    }
+  });
+};
+
+
+const checkExpiredTimers = () => {
+  const now = Date.now();
+  for (const [id, timerData] of activeTimers) {
+    if (timerData.eta <= now && !timerData.expired) {
+      timerData.expired = true;
+      if (timerData.callback) {
+        timerData.callback();
+      }
+
+      
+      if (timerData.gracePeriod > 0) {
+        const graceTimer = setTimeout(() => {
+          handleGracePeriodExpired(id);
+        }, timerData.gracePeriod);
+
+        activeTimers.set(`${id}_grace`, {
+          timerId: graceTimer,
+          eta: now + timerData.gracePeriod,
+          callback: null,
+          gracePeriod: 0,
+          expired: false
+        });
+      }
+    }
+  }
+  saveActiveTimers();
+};
+
+
 export const initializeControlTimers = async () => {
   try {
+    initializeAppStateListener();
+
     const storedTimers = await AsyncStorage.getItem(STORAGE_KEY_TIMERS);
     if (storedTimers) {
       const timersData = JSON.parse(storedTimers);
       const now = Date.now();
 
-      // Restore timers that haven't expired yet
+      
       for (const [id, timerData] of Object.entries(timersData)) {
         if (timerData.eta > now) {
           const delay = timerData.eta - now;
           scheduleTimer(id, delay, timerData.callback, timerData.gracePeriod);
         } else {
-          // Timer already expired, trigger callback
+          
           if (timerData.callback) {
-            timerData.callback();
+            
+            setTimeout(() => timerData.callback(), 100);
           }
         }
       }
@@ -30,13 +83,13 @@ export const initializeControlTimers = async () => {
   }
 };
 
-// Schedule a control time timer
+
 export const scheduleControlTime = (id, eta, gracePeriod, callback) => {
   const now = Date.now();
   const delay = eta - now;
 
   if (delay <= 0) {
-    // Already past the ETA, trigger immediately
+    
     callback();
     return;
   }
@@ -45,86 +98,121 @@ export const scheduleControlTime = (id, eta, gracePeriod, callback) => {
   saveActiveTimers();
 };
 
-// Internal timer scheduling
+
 const scheduleTimer = (id, delay, callback, gracePeriod) => {
-  // Clear any existing timer for this ID
+  
   clearTimer(id);
 
-  const timerId = BackgroundTimer.setTimeout(() => {
-    // Control time reached - trigger callback
+  const timerId = setTimeout(() => {
+    
     callback();
 
-    // Schedule grace period timer
+    
     if (gracePeriod > 0) {
-      const graceTimerId = BackgroundTimer.setTimeout(() => {
-        // Grace period expired - auto-send SOS
+      const graceTimerId = setTimeout(() => {
+        
         handleGracePeriodExpired(id);
       }, gracePeriod);
 
-      activeTimers.set(`${id}_grace`, graceTimerId);
+      activeTimers.set(`${id}_grace`, {
+        timerId: graceTimerId,
+        eta: Date.now() + gracePeriod,
+        callback: null,
+        gracePeriod: 0,
+        expired: false
+      });
     }
 
-    // Remove the main timer
+    
     activeTimers.delete(id);
     saveActiveTimers();
   }, delay);
 
-  activeTimers.set(id, { timerId, eta: Date.now() + delay, callback, gracePeriod });
+  activeTimers.set(id, {
+    timerId,
+    eta: Date.now() + delay,
+    callback,
+    gracePeriod,
+    expired: false
+  });
 };
 
-// Handle grace period expiration
-const handleGracePeriodExpired = async (controlId) => {
-  // TODO: Integrate with SosContext to auto-send SOS
-  console.log(`Grace period expired for control time ${controlId} - auto-SOS should be sent`);
 
-  // Remove grace timer
+const handleGracePeriodExpired = async (controlId) => {
+  console.log(`[CONTROL] Grace period expired for control time ${controlId} - auto-SOS should be sent`);
+
+  
+  try {
+    if (sosCallback) {
+      console.log(`[CONTROL] Triggering auto-SOS for control time ${controlId}`);
+      await sosCallback({
+        autoSOS: true,
+        controlTimeId: controlId,
+        reason: 'grace_period_expired'
+      });
+      console.log(`[CONTROL] Auto-SOS triggered successfully for control time ${controlId}`);
+    } else {
+      console.warn(`[CONTROL] No SOS callback set for auto-SOS on control time ${controlId}`);
+    }
+  } catch (error) {
+    console.error(`[CONTROL] Error auto-sending SOS for control time ${controlId}:`, error);
+  }
+
+  
   activeTimers.delete(`${controlId}_grace`);
   saveActiveTimers();
 };
 
-// Clear a specific control time timer
+
 export const clearControlTime = (id) => {
   clearTimer(id);
-  clearTimer(`${id}_grace`); // Also clear grace period timer
+  clearTimer(`${id}_grace`); 
   saveActiveTimers();
 };
 
-// Internal timer clearing
+
 const clearTimer = (id) => {
   const timerData = activeTimers.get(id);
   if (timerData) {
     if (typeof timerData === 'number') {
-      BackgroundTimer.clearTimeout(timerData);
+      clearTimeout(timerData);
     } else if (timerData.timerId) {
-      BackgroundTimer.clearTimeout(timerData.timerId);
+      clearTimeout(timerData.timerId);
     }
     activeTimers.delete(id);
   }
 };
 
-// Clear all active timers
+
 export const clearAllControlTimers = () => {
   for (const [id, timerData] of activeTimers) {
     if (typeof timerData === 'number') {
-      BackgroundTimer.clearTimeout(timerData);
+      clearTimeout(timerData);
     } else if (timerData.timerId) {
-      BackgroundTimer.clearTimeout(timerData.timerId);
+      clearTimeout(timerData.timerId);
     }
   }
   activeTimers.clear();
   AsyncStorage.removeItem(STORAGE_KEY_TIMERS);
+
+  
+  if (appStateSubscription) {
+    appStateSubscription.remove();
+    appStateSubscription = null;
+  }
 };
 
-// Save active timers to storage for persistence
+
 const saveActiveTimers = async () => {
   try {
     const timersData = {};
     for (const [id, timerData] of activeTimers) {
-      if (typeof timerData === 'object' && timerData.eta) {
+      if (typeof timerData === 'object' && timerData.eta && !timerData.expired) {
         timersData[id] = {
           eta: timerData.eta,
-          callback: timerData.callback ? timerData.callback.toString() : null,
-          gracePeriod: timerData.gracePeriod,
+          gracePeriod: timerData.gracePeriod || 0,
+          
+          
         };
       }
     }
@@ -134,7 +222,7 @@ const saveActiveTimers = async () => {
   }
 };
 
-// Get active timers info (for debugging)
+
 export const getActiveTimers = () => {
   const timers = [];
   for (const [id, timerData] of activeTimers) {
@@ -142,15 +230,17 @@ export const getActiveTimers = () => {
       id,
       eta: typeof timerData === 'object' ? timerData.eta : null,
       hasCallback: typeof timerData === 'object' ? !!timerData.callback : false,
+      expired: typeof timerData === 'object' ? timerData.expired : false,
+      gracePeriod: typeof timerData === 'object' ? timerData.gracePeriod : 0,
     });
   }
   return timers;
 };
 
-// Snooze control time (extend by specified minutes)
+
 export const snoozeControlTime = (id, minutes = 15) => {
   const timerData = activeTimers.get(id);
-  if (timerData && timerData.eta) {
+  if (timerData && timerData.eta && timerData.callback) {
     const newEta = timerData.eta + (minutes * 60 * 1000);
     clearTimer(id);
     scheduleTimer(id, newEta - Date.now(), timerData.callback, timerData.gracePeriod);
